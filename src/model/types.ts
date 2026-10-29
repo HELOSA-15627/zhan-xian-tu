@@ -95,6 +95,30 @@ export type SceneObject =
   | TextObject
   | FreehandObject;
 
+export type SceneObjectPatch = {
+  name?: string;
+  layerId?: string;
+  x?: number;
+  y?: number;
+  size?: number;
+  rotation?: number;
+  opacity?: number;
+  color?: string;
+  symbol?: TacticalSymbol;
+  label?: string;
+  start?: Point;
+  end?: Point;
+  width?: number;
+  dashed?: boolean;
+  animation?: AnimationSpec;
+  points?: Point[];
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
+  text?: string;
+  fontSize?: number;
+};
+
 export type BackgroundSettings = {
   dataUrl: string | null;
   opacity: number;
