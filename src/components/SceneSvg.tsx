@@ -30,7 +30,7 @@ function lineLength(start: Point, end: Point): number {
 
 function arrowHead(arrow: ArrowObject): string {
   const angle = Math.atan2(arrow.end.y - arrow.start.y, arrow.end.x - arrow.start.x);
-  const size = Math.max(10, arrow.width * 1.9);
+  const size = Math.max(14, arrow.width * 2.4);
 
   const pointA = {
     x: arrow.end.x - Math.cos(angle - Math.PI / 7) * size,
@@ -188,6 +188,17 @@ function ObjectNode({
         >
           <line
             {...dashProps}
+            opacity="0.46"
+            stroke="#0b0d12"
+            strokeLinecap="round"
+            strokeWidth={object.width + 4}
+            x1={object.start.x}
+            x2={object.end.x}
+            y1={object.start.y}
+            y2={object.end.y}
+          />
+          <line
+            {...dashProps}
             stroke={object.color}
             strokeLinecap="round"
             strokeWidth={object.width}
@@ -195,6 +206,17 @@ function ObjectNode({
             x2={object.end.x}
             y1={object.start.y}
             y2={object.end.y}
+          />
+          <polygon
+            fill="#0b0d12"
+            opacity={progress > 0.92 ? 0.7 : 0}
+            points={arrowHead({
+              ...object,
+              end: {
+                x: object.end.x + 1.5,
+                y: object.end.y + 1.5,
+              },
+            })}
           />
           <polygon
             fill={object.color}

@@ -301,7 +301,7 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
         }}
       >
         <SceneSvg
-          interactive
+          interactive={tool === "select"}
           onObjectPointerDown={selectObject}
           project={project}
           selectedIds={selectedIds}
@@ -365,6 +365,9 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
       </div>
       <div className="canvas-coordinates" aria-live="polite">
         {Math.round(viewport.scale * 100)}%
+      </div>
+      <div className="canvas-object-count" data-testid="object-count">
+        {project.objects.length} 个对象
       </div>
       {project.objects.length === 0 ? (
         <div className="canvas-empty-note">

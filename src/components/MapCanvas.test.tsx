@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { createMarker } from "../model/project";
 import { useEditorStore } from "../store/editorStore";
 import { MapCanvas } from "./MapCanvas";
 
@@ -53,6 +54,41 @@ describe("map canvas", () => {
       type: "arrow",
       start: { x: 100, y: 100 },
       end: { x: 260, y: 180 },
+    });
+  });
+
+  it("starts an arrow even when its origin overlaps an existing object", () => {
+    const store = useEditorStore.getState();
+    const layerId = store.project.layers[0].id;
+    store.addObject(createMarker(layerId, { x: 100, y: 100 }));
+    store.setTool("arrow");
+    const { container } = render(<MapCanvas />);
+    const canvas = screen.getByTestId("map-canvas");
+    const marker = container.querySelector("[data-object-id]");
+    if (!marker) throw new Error("Marker SVG was not rendered");
+
+    fireEvent.pointerDown(marker, {
+      button: 0,
+      clientX: 100,
+      clientY: 100,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(canvas, {
+      clientX: 240,
+      clientY: 180,
+      pointerId: 1,
+    });
+    fireEvent.pointerUp(canvas, {
+      clientX: 240,
+      clientY: 180,
+      pointerId: 1,
+    });
+
+    expect(useEditorStore.getState().project.objects).toHaveLength(2);
+    expect(useEditorStore.getState().project.objects[1]).toMatchObject({
+      type: "arrow",
+      start: { x: 100, y: 100 },
+      end: { x: 240, y: 180 },
     });
   });
 

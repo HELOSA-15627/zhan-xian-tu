@@ -1,10 +1,8 @@
-import {
-  Eye,
-  EyeSlash,
-  LockSimple,
-  LockSimpleOpen,
-  Plus,
-} from "@phosphor-icons/react";
+import { Eye } from "@phosphor-icons/react/Eye";
+import { EyeSlash } from "@phosphor-icons/react/EyeSlash";
+import { LockSimple } from "@phosphor-icons/react/LockSimple";
+import { LockSimpleOpen } from "@phosphor-icons/react/LockSimpleOpen";
+import { Plus } from "@phosphor-icons/react/Plus";
 
 import type { SceneObject } from "../model/types";
 import { useEditorStore } from "../store/editorStore";

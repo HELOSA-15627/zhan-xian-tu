@@ -1,8 +1,6 @@
-import {
-  ArrowCounterClockwise,
-  Pause,
-  Play,
-} from "@phosphor-icons/react";
+import { ArrowCounterClockwise } from "@phosphor-icons/react/ArrowCounterClockwise";
+import { Pause } from "@phosphor-icons/react/Pause";
+import { Play } from "@phosphor-icons/react/Play";
 
 type TimelineProps = {
   duration: number;

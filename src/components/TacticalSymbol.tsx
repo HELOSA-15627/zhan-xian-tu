@@ -11,8 +11,8 @@ export function TacticalSymbol({
   color,
   size,
 }: TacticalSymbolProps) {
-  const line = "#f2efe8";
-  const strokeWidth = 1.6;
+  const line = "#0b0d12";
+  const strokeWidth = 2.1;
 
   return (
     <svg

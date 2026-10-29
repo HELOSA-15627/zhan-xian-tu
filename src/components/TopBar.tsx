@@ -1,10 +1,10 @@
-import {
-  ArrowClockwise,
-  ArrowCounterClockwise,
-  DownloadSimple,
-  FolderOpen,
-  MapTrifold,
-} from "@phosphor-icons/react";
+import { ArrowClockwise } from "@phosphor-icons/react/ArrowClockwise";
+import { ArrowCounterClockwise } from "@phosphor-icons/react/ArrowCounterClockwise";
+import { CopySimple } from "@phosphor-icons/react/CopySimple";
+import { DownloadSimple } from "@phosphor-icons/react/DownloadSimple";
+import { FolderOpen } from "@phosphor-icons/react/FolderOpen";
+import { MapTrifold } from "@phosphor-icons/react/MapTrifold";
+import { Trash } from "@phosphor-icons/react/Trash";
 
 import { useEditorStore } from "../store/editorStore";
 
@@ -26,8 +26,13 @@ export function TopBar({
   const project = useEditorStore((state) => state.project);
   const canUndo = useEditorStore((state) => state.past.length > 0);
   const canRedo = useEditorStore((state) => state.future.length > 0);
+  const hasSelection = useEditorStore((state) => state.selectedIds.length > 0);
   const undo = useEditorStore((state) => state.undo);
   const redo = useEditorStore((state) => state.redo);
+  const duplicateSelected = useEditorStore(
+    (state) => state.duplicateSelected,
+  );
+  const removeSelected = useEditorStore((state) => state.removeSelected);
 
   return (
     <header className="topbar">
@@ -66,9 +71,29 @@ export function TopBar({
         >
           <ArrowClockwise aria-hidden="true" size={17} />
         </button>
+        <button
+          aria-label="复制所选"
+          className="icon-button"
+          disabled={!hasSelection}
+          onClick={duplicateSelected}
+          type="button"
+        >
+          <CopySimple aria-hidden="true" size={16} />
+        </button>
+        <button
+          aria-label="删除所选"
+          className="icon-button"
+          disabled={!hasSelection}
+          onClick={removeSelected}
+          type="button"
+        >
+          <Trash aria-hidden="true" size={16} />
+        </button>
       </div>
       <div className="topbar-actions">
-        <span className="save-state">{saveState}</span>
+        <span aria-live="polite" className="save-state" role="status">
+          {saveState}
+        </span>
         <button
           className="button button-quiet"
           onClick={onImportImage}

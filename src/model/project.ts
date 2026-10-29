@@ -62,7 +62,7 @@ export function createMarker(
     name: "战役图标",
     x: point.x,
     y: point.y,
-    size: 32,
+    size: 44,
     rotation: 0,
     opacity: 1,
     color: "#b9e253",

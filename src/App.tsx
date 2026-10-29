@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import { SlidersHorizontal, SquaresFour } from "@phosphor-icons/react";
+import { SlidersHorizontal } from "@phosphor-icons/react/SlidersHorizontal";
+import { SquaresFour } from "@phosphor-icons/react/SquaresFour";
 
 import { AssetLibrary } from "./components/AssetLibrary";
 import { Inspector } from "./components/Inspector";
@@ -9,7 +10,6 @@ import { Timeline } from "./components/Timeline";
 import { ToolRail } from "./components/ToolRail";
 import { TopBar } from "./components/TopBar";
 import { WelcomeOverlay } from "./components/WelcomeOverlay";
-import { downloadPng } from "./export/exportPng";
 import { downloadProject } from "./export/exportProject";
 import {
   readFileAsDataUrl,
@@ -37,6 +37,14 @@ function App() {
   const updateProjectTitle = useEditorStore(
     (state) => state.updateProjectTitle,
   );
+  const tool = useEditorStore((state) => state.tool);
+  const setTool = useEditorStore((state) => state.setTool);
+  const undo = useEditorStore((state) => state.undo);
+  const redo = useEditorStore((state) => state.redo);
+  const duplicateSelected = useEditorStore(
+    (state) => state.duplicateSelected,
+  );
+  const removeSelected = useEditorStore((state) => state.removeSelected);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const projectInputRef = useRef<HTMLInputElement>(null);
   const [hydrated, setHydrated] = useState(false);
@@ -125,6 +133,73 @@ function App() {
     }
   }, [duration]);
 
+  useEffect(() => {
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      if (
+        saveState === "正在保存…" ||
+        saveState === "自动保存失败" ||
+        saveState === "无法自动保存"
+      ) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    };
+
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
+  }, [saveState]);
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.closest(
+          "input, textarea, select, [contenteditable='true']",
+        )
+      ) {
+        return;
+      }
+
+      const modifier = event.ctrlKey || event.metaKey;
+      if (modifier && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        if (event.shiftKey) redo();
+        else undo();
+        return;
+      }
+      if (modifier && event.key.toLowerCase() === "y") {
+        event.preventDefault();
+        redo();
+        return;
+      }
+      if (modifier && event.key.toLowerCase() === "d") {
+        event.preventDefault();
+        duplicateSelected();
+        return;
+      }
+      if (event.key === "Delete" || event.key === "Backspace") {
+        event.preventDefault();
+        removeSelected();
+        return;
+      }
+
+      const shortcuts: Record<string, typeof tool> = {
+        v: "select",
+        h: "pan",
+        m: "marker",
+        a: "arrow",
+        r: "region",
+        t: "text",
+        p: "freehand",
+      };
+      const nextTool = shortcuts[event.key.toLowerCase()];
+      if (nextTool) setTool(nextTool);
+    };
+
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [duplicateSelected, redo, removeSelected, setTool, tool, undo]);
+
   const handleImageFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -161,6 +236,7 @@ function App() {
   const handleExportPng = async () => {
     setNotice("正在生成 PNG…");
     try {
+      const { downloadPng } = await import("./export/exportPng");
       await downloadPng(project, 1);
       setNotice("PNG 已导出");
     } catch (error) {
@@ -186,6 +262,9 @@ function App() {
         openPanel ? `${openPanel}-open` : ""
       }`}
     >
+      <a className="skip-link" href="#main-workspace">
+        跳到地图画布
+      </a>
       <TopBar
         onExportPng={handleExportPng}
         onExportProject={() => downloadProject(project)}
@@ -217,7 +296,12 @@ function App() {
         </div>
         {leftTab === "symbols" ? <AssetLibrary /> : <LayerPanel />}
       </aside>
-      <main aria-label="战术地图编辑器" className="workspace">
+      <main
+        aria-label="战术地图编辑器"
+        className="workspace"
+        id="main-workspace"
+      >
+        <h1 className="visually-hidden">战线图志战术地图编辑器</h1>
         <div className="mobile-panel-actions">
           <button
             aria-label="打开资源面板"
@@ -260,14 +344,18 @@ function App() {
 
       <input
         accept="image/png,image/jpeg,image/webp"
+        aria-label="选择底图文件"
         className="visually-hidden"
+        name="basemap-image"
         onChange={handleImageFile}
         ref={imageInputRef}
         type="file"
       />
       <input
         accept=".json,.atlas.json,application/json"
+        aria-label="选择项目文件"
         className="visually-hidden"
+        name="atlas-project"
         onChange={handleProjectFile}
         ref={projectInputRef}
         type="file"
@@ -280,14 +368,21 @@ function App() {
       />
 
       {notice ? (
-        <button
-          aria-label="关闭提示"
+        <div
+          aria-live="polite"
           className="toast"
-          onClick={() => setNotice(null)}
-          type="button"
+          role="status"
         >
-          {notice}
-        </button>
+          <span>{notice}</span>
+          <button
+            aria-label="关闭提示"
+            className="toast-close"
+            onClick={() => setNotice(null)}
+            type="button"
+          >
+            关闭
+          </button>
+        </div>
       ) : null}
     </div>
   );

@@ -1,4 +1,6 @@
-import { ArrowRight, ImageSquare, X } from "@phosphor-icons/react";
+import { ArrowRight } from "@phosphor-icons/react/ArrowRight";
+import { ImageSquare } from "@phosphor-icons/react/ImageSquare";
+import { X } from "@phosphor-icons/react/X";
 
 type WelcomeOverlayProps = {
   open: boolean;

@@ -55,8 +55,10 @@ function NumberInput({
   return (
     <input
       aria-label={label}
+      autoComplete="off"
       max={max}
       min={min}
+      name={label}
       onChange={(event: ChangeEvent<HTMLInputElement>) =>
         onChange(Number(event.target.value))
       }
@@ -76,6 +78,7 @@ function markerFields(
       <Field label="图标类型">
         <select
           aria-label="图标类型"
+          name="symbol-type"
           onChange={(event) =>
             update({ symbol: event.target.value as TacticalSymbol })
           }
@@ -91,6 +94,8 @@ function markerFields(
       <Field label="地图批注">
         <input
           aria-label="图标批注"
+          autoComplete="off"
+          name="marker-label"
           onChange={(event) => update({ label: event.target.value })}
           placeholder="例如：第 16 大队"
           value={object.label}
@@ -99,6 +104,8 @@ function markerFields(
       <Field label="颜色">
         <input
           aria-label="图标颜色"
+          autoComplete="off"
+          name="marker-color"
           onChange={(event) => update({ color: event.target.value })}
           type="text"
           value={object.color}
@@ -135,6 +142,8 @@ function arrowFields(
       <Field label="批注">
         <input
           aria-label="箭头批注"
+          autoComplete="off"
+          name="arrow-label"
           onChange={(event) => update({ label: event.target.value })}
           value={object.label}
         />
@@ -142,6 +151,8 @@ function arrowFields(
       <Field label="颜色">
         <input
           aria-label="箭头颜色"
+          autoComplete="off"
+          name="arrow-color"
           onChange={(event) => update({ color: event.target.value })}
           type="text"
           value={object.color}
@@ -159,6 +170,7 @@ function arrowFields(
       <Field label="不透明度">
         <input
           aria-label="箭头不透明度"
+          name="arrow-opacity"
           max="1"
           min="0"
           onChange={(event) => update({ opacity: Number(event.target.value) })}
@@ -170,6 +182,7 @@ function arrowFields(
       <label className="check-field">
         <input
           aria-label="使用虚线"
+          name="arrow-dashed"
           checked={object.dashed}
           onChange={(event) => update({ dashed: event.target.checked })}
           type="checkbox"
@@ -179,6 +192,7 @@ function arrowFields(
       <label className="check-field">
         <input
           aria-label="启用箭头绘制动画"
+          name="arrow-animation-enabled"
           checked={object.animation.enabled}
           onChange={(event) =>
             update({
@@ -233,6 +247,8 @@ function regionFields(
       <Field label="区域批注">
         <input
           aria-label="区域批注"
+          autoComplete="off"
+          name="region-label"
           onChange={(event) => update({ label: event.target.value })}
           value={object.label}
         />
@@ -240,6 +256,8 @@ function regionFields(
       <Field label="填充颜色">
         <input
           aria-label="区域填充颜色"
+          autoComplete="off"
+          name="region-fill"
           onChange={(event) => update({ fill: event.target.value })}
           type="text"
           value={object.fill}
@@ -248,6 +266,8 @@ function regionFields(
       <Field label="边框颜色">
         <input
           aria-label="区域边框颜色"
+          autoComplete="off"
+          name="region-stroke"
           onChange={(event) => update({ stroke: event.target.value })}
           type="text"
           value={object.stroke}
@@ -265,6 +285,7 @@ function regionFields(
       <Field label="不透明度">
         <input
           aria-label="区域不透明度"
+          name="region-opacity"
           max="1"
           min="0"
           onChange={(event) => update({ opacity: Number(event.target.value) })}
@@ -286,6 +307,7 @@ function textFields(
       <Field label="批注内容">
         <textarea
           aria-label="文字批注"
+          name="text-content"
           onChange={(event) => update({ text: event.target.value })}
           rows={4}
           value={object.text}
@@ -294,6 +316,8 @@ function textFields(
       <Field label="颜色">
         <input
           aria-label="文字颜色"
+          autoComplete="off"
+          name="text-color"
           onChange={(event) => update({ color: event.target.value })}
           type="text"
           value={object.color}
@@ -330,6 +354,8 @@ function freehandFields(
       <Field label="颜色">
         <input
           aria-label="手绘颜色"
+          autoComplete="off"
+          name="freehand-color"
           onChange={(event) => update({ color: event.target.value })}
           type="text"
           value={object.color}
@@ -347,6 +373,7 @@ function freehandFields(
       <Field label="不透明度">
         <input
           aria-label="手绘不透明度"
+          name="freehand-opacity"
           max="1"
           min="0"
           onChange={(event) => update({ opacity: Number(event.target.value) })}
@@ -381,6 +408,8 @@ export function Inspector() {
         <Field label="地图名称">
           <input
             aria-label="地图名称"
+            autoComplete="off"
+            name="map-title"
             onChange={(event) => updateProjectTitle(event.target.value)}
             value={project.title}
           />
@@ -388,6 +417,7 @@ export function Inspector() {
         <Field label="底图不透明度">
           <input
             aria-label="底图不透明度"
+            name="background-opacity"
             max="1"
             min="0"
             onChange={(event) =>
@@ -401,6 +431,7 @@ export function Inspector() {
         <Field label="灰度">
           <input
             aria-label="底图灰度"
+            name="background-grayscale"
             max="100"
             min="0"
             onChange={(event) =>
@@ -413,6 +444,7 @@ export function Inspector() {
         <Field label="对比度">
           <input
             aria-label="底图对比度"
+            name="background-contrast"
             max="2"
             min="0.4"
             onChange={(event) =>
@@ -426,6 +458,7 @@ export function Inspector() {
         <Field label="亮度">
           <input
             aria-label="底图亮度"
+            name="background-brightness"
             max="2"
             min="0.4"
             onChange={(event) =>

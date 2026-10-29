@@ -1,12 +1,10 @@
-import {
-  ArrowUpRight,
-  Cursor,
-  Hand,
-  MapPin,
-  Path,
-  Polygon,
-  TextT,
-} from "@phosphor-icons/react";
+import { ArrowUpRight } from "@phosphor-icons/react/ArrowUpRight";
+import { Cursor } from "@phosphor-icons/react/Cursor";
+import { Hand } from "@phosphor-icons/react/Hand";
+import { MapPin } from "@phosphor-icons/react/MapPin";
+import { Path } from "@phosphor-icons/react/Path";
+import { Polygon } from "@phosphor-icons/react/Polygon";
+import { TextT } from "@phosphor-icons/react/TextT";
 
 import type { EditorTool } from "../model/types";
 import { useEditorStore } from "../store/editorStore";
