@@ -62,10 +62,21 @@ textarea:focus-visible {
 }
 
 .brand-lockup,
+.topbar-tools,
 .topbar-actions {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.topbar {
+  gap: 16px;
+}
+
+.topbar-tools {
+  margin-right: auto;
+  padding-left: 6px;
+  border-left: 1px solid var(--line);
 }
 
 .brand-lockup svg {
@@ -112,10 +123,47 @@ textarea:focus-visible {
   color: white;
 }
 
+.button-primary:hover {
+  background: #ef4ca0;
+}
+
+.button-quiet {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--text);
+}
+
+.button-quiet:hover {
+  background: var(--graphite-raised);
+}
+
 .button-secondary {
   border-color: rgb(242 239 232 / 28%);
   background: rgb(11 13 18 / 60%);
   color: var(--text);
+}
+
+.icon-button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.icon-button:hover:not(:disabled) {
+  border-color: var(--line);
+  background: var(--graphite-raised);
+  color: var(--text);
+}
+
+.icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.34;
 }
 
 .tool-rail {
@@ -212,11 +260,135 @@ textarea:focus-visible {
   cursor: pointer;
 }
 
-.symbol-preview {
-  width: 24px;
-  height: 18px;
-  border: 2px solid var(--friendly);
-  clip-path: polygon(0 0, 70% 0, 100% 50%, 70% 100%, 0 100%);
+.symbol-card:hover {
+  border-color: #535c75;
+  background: #23293a;
+}
+
+.symbol-card[aria-pressed="true"] {
+  border-color: var(--signal);
+  background: var(--signal-soft);
+  box-shadow: inset 0 0 0 1px rgb(227 49 141 / 24%);
+}
+
+.symbol-card span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.symbol-card[aria-pressed="true"] span {
+  color: var(--text);
+}
+
+.layer-list {
+  display: grid;
+  gap: 8px;
+}
+
+.layer-group {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: #11151d;
+}
+
+.layer-group.is-active {
+  border-color: rgb(227 49 141 / 52%);
+  box-shadow: inset 2px 0 0 var(--signal);
+}
+
+.layer-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 28px 28px;
+  align-items: center;
+  gap: 4px;
+  min-height: 38px;
+  padding: 4px 6px 4px 9px;
+}
+
+.layer-row input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--signal);
+}
+
+.layer-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+
+.layer-name span {
+  color: var(--muted);
+  font-family: var(--font-data);
+  font-size: 10px;
+}
+
+.object-list {
+  display: grid;
+  gap: 2px;
+  padding: 4px 6px 7px 27px;
+}
+
+.object-row {
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+  padding: 0 6px;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  text-align: left;
+}
+
+.object-row:hover,
+.object-row.is-selected {
+  background: var(--graphite-raised);
+  color: var(--text);
+}
+
+.object-type {
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+  background: var(--muted);
+}
+
+.object-type.type-marker {
+  background: var(--friendly);
+}
+
+.object-type.type-arrow {
+  background: var(--hostile);
+}
+
+.object-type.type-region {
+  background: var(--signal);
+}
+
+.object-type.type-text {
+  background: var(--warning);
+}
+
+.object-type.type-freehand {
+  background: var(--info);
+}
+
+.muted-line {
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .workspace {
@@ -397,9 +569,46 @@ textarea:focus-visible {
   color: var(--text);
 }
 
+.field select,
+.field textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--graphite-raised);
+  color: var(--text);
+}
+
+.field select {
+  min-height: 34px;
+  padding: 0 8px;
+}
+
+.field textarea {
+  min-height: 92px;
+  padding: 8px 10px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
 .field input[type="range"] {
   min-height: 20px;
   padding: 0;
+  accent-color: var(--signal);
+}
+
+.check-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.check-field input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
   accent-color: var(--signal);
 }
 

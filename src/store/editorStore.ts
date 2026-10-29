@@ -13,6 +13,7 @@ import type {
   Layer,
   SceneObject,
   SceneObjectPatch,
+  TacticalSymbol,
 } from "../model/types";
 
 const HISTORY_LIMIT = 50;
@@ -21,6 +22,7 @@ export type EditorState = {
   project: AtlasProject;
   selectedIds: string[];
   activeLayerId: string;
+  activeSymbol: TacticalSymbol;
   tool: EditorTool;
   viewport: Viewport;
   past: AtlasProject[];
@@ -29,6 +31,7 @@ export type EditorState = {
   setSelection: (ids: string[]) => void;
   setViewport: (viewport: Viewport) => void;
   setActiveLayer: (layerId: string) => void;
+  setActiveSymbol: (symbol: TacticalSymbol) => void;
   createNewProject: (title?: string) => void;
   loadProject: (project: AtlasProject) => void;
   updateProjectTitle: (title: string) => void;
@@ -91,6 +94,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     project: initialProject,
     selectedIds: [],
     activeLayerId: initialProject.layers[0].id,
+    activeSymbol: "friendly",
     tool: "select",
     viewport: { x: 0, y: 0, scale: 1 },
     past: [],
@@ -100,6 +104,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     setSelection: (selectedIds) => set({ selectedIds }),
     setViewport: (viewport) => set({ viewport }),
     setActiveLayer: (activeLayerId) => set({ activeLayerId }),
+    setActiveSymbol: (activeSymbol) => set({ activeSymbol }),
 
     createNewProject: (title) => {
       const project = createBlankProject(title);
@@ -107,6 +112,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
         project,
         selectedIds: [],
         activeLayerId: project.layers[0].id,
+        activeSymbol: "friendly",
         tool: "select",
         viewport: { x: 0, y: 0, scale: 1 },
         past: [],

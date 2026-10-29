@@ -79,6 +79,7 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
   const tool = useEditorStore((state) => state.tool);
   const selectedIds = useEditorStore((state) => state.selectedIds);
   const activeLayerId = useEditorStore((state) => state.activeLayerId);
+  const activeSymbol = useEditorStore((state) => state.activeSymbol);
   const setViewport = useEditorStore((state) => state.setViewport);
   const setTool = useEditorStore((state) => state.setTool);
   const setSelection = useEditorStore((state) => state.setSelection);
@@ -177,7 +178,7 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
     }
 
     if (tool === "marker") {
-      addObject(createMarker(activeLayerId, world));
+      addObject(createMarker(activeLayerId, world, activeSymbol));
       return;
     }
 

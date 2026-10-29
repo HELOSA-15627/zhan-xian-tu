@@ -76,4 +76,13 @@ describe("editor store", () => {
     useEditorStore.getState().undo();
     expect(useEditorStore.getState().project.layers[0].visible).toBe(true);
   });
+
+  it("selects a tactical symbol without creating history", () => {
+    const historyLength = useEditorStore.getState().past.length;
+
+    useEditorStore.getState().setActiveSymbol("aviation");
+
+    expect(useEditorStore.getState().activeSymbol).toBe("aviation");
+    expect(useEditorStore.getState().past).toHaveLength(historyLength);
+  });
 });
