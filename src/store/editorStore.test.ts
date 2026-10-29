@@ -85,4 +85,18 @@ describe("editor store", () => {
     expect(useEditorStore.getState().activeSymbol).toBe("aviation");
     expect(useEditorStore.getState().past).toHaveLength(historyLength);
   });
+
+  it("replaces the background and map dimensions together", () => {
+    useEditorStore
+      .getState()
+      .applyBackground("data:image/png;base64,AAAA", 1200, 800);
+
+    expect(useEditorStore.getState().project).toMatchObject({
+      width: 1200,
+      height: 800,
+      background: {
+        dataUrl: "data:image/png;base64,AAAA",
+      },
+    });
+  });
 });

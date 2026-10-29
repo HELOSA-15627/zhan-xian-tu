@@ -31,6 +31,18 @@ button {
   border: 0;
 }
 
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
@@ -209,6 +221,31 @@ textarea:focus-visible {
   grid-area: left;
   border-right: 1px solid var(--line);
   padding: 16px 14px;
+}
+
+.panel-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  margin: -5px 0 16px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: #0f1219;
+}
+
+.panel-tab {
+  min-height: 30px;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.panel-tab[aria-selected="true"] {
+  background: var(--graphite-raised);
+  color: var(--text);
 }
 
 .inspector {
@@ -393,6 +430,7 @@ textarea:focus-visible {
 
 .workspace {
   grid-area: workspace;
+  position: relative;
   min-width: 0;
   min-height: 0;
   padding: 18px;
@@ -401,6 +439,27 @@ textarea:focus-visible {
     linear-gradient(90deg, rgb(255 255 255 / 2%) 1px, transparent 1px),
     #090b0f;
   background-size: 24px 24px;
+}
+
+.mobile-panel-actions {
+  position: absolute;
+  z-index: 12;
+  top: 28px;
+  right: 28px;
+  display: none;
+  gap: 6px;
+}
+
+.canvas-action {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid rgb(242 239 232 / 18%);
+  border-radius: var(--radius-control);
+  background: rgb(20 24 33 / 88%);
+  color: var(--text);
+  cursor: pointer;
 }
 
 .map-stage {
@@ -486,6 +545,86 @@ textarea:focus-visible {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
+}
+
+.welcome-backdrop {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(3 5 8 / 78%);
+  backdrop-filter: blur(8px);
+}
+
+.welcome-dialog {
+  position: relative;
+  width: min(540px, 100%);
+  padding: 34px 34px 28px;
+  border: 1px solid #42495d;
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 3%), transparent 38%),
+    var(--graphite);
+  box-shadow: 0 28px 90px rgb(0 0 0 / 54%);
+}
+
+.welcome-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+.welcome-rule {
+  width: 48px;
+  height: 3px;
+  margin-bottom: 22px;
+  background: var(--signal);
+}
+
+.welcome-kicker {
+  margin: 0 0 10px;
+  color: var(--signal);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.welcome-dialog h1 {
+  max-width: 13ch;
+  margin: 0;
+  font-size: clamp(30px, 4vw, 44px);
+  font-weight: 650;
+  letter-spacing: -0.04em;
+  line-height: 1.08;
+}
+
+.welcome-copy {
+  max-width: 48ch;
+  margin: 18px 0 24px;
+  color: #bcc2d0;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.welcome-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.welcome-primary {
+  min-height: 40px;
+  padding-inline: 16px;
+}
+
+.welcome-actions .button-quiet {
+  min-height: 40px;
+}
+
+.welcome-note {
+  margin: 18px 0 0;
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .map-paper {
@@ -683,6 +822,23 @@ textarea:focus-visible {
   font-size: 11px;
 }
 
+.toast {
+  position: fixed;
+  z-index: 50;
+  right: 18px;
+  bottom: calc(var(--timeline-height) + 16px);
+  max-width: min(360px, calc(100vw - 36px));
+  padding: 11px 14px;
+  border: 1px solid #4a5268;
+  border-left: 2px solid var(--signal);
+  background: #151a25;
+  box-shadow: 0 12px 36px rgb(0 0 0 / 38%);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+
 @media (max-width: 1100px) {
   .app-shell {
     grid-template:
@@ -692,8 +848,36 @@ textarea:focus-visible {
       / var(--tool-rail-width) minmax(0, 1fr) 248px;
   }
 
+  .mobile-panel-actions {
+    display: flex;
+  }
+
+  .left-panel,
+  .inspector {
+    position: fixed;
+    z-index: 30;
+    top: var(--topbar-height);
+    bottom: var(--timeline-height);
+    width: min(320px, calc(100vw - 72px));
+    box-shadow: 18px 0 60px rgb(0 0 0 / 42%);
+  }
+
   .left-panel {
+    left: var(--tool-rail-width);
+  }
+
+  .inspector {
+    right: 0;
+  }
+
+  .left-panel,
+  .inspector {
     display: none;
+  }
+
+  .resources-open .left-panel,
+  .inspector-open .inspector {
+    display: block;
   }
 }
 
@@ -706,13 +890,44 @@ textarea:focus-visible {
       / minmax(0, 1fr);
   }
 
-  .tool-rail,
-  .inspector {
-    display: none;
-  }
-
   .workspace {
     padding: 10px;
+  }
+
+  .tool-rail {
+    position: fixed;
+    z-index: 24;
+    right: 10px;
+    bottom: calc(var(--timeline-height) + 10px);
+    left: 10px;
+    display: flex;
+    height: 46px;
+    flex-direction: row;
+    justify-content: center;
+    padding: 5px 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+    background: rgb(20 24 33 / 94%);
+    box-shadow: 0 12px 30px rgb(0 0 0 / 36%);
+    backdrop-filter: blur(10px);
+  }
+
+  .inspector {
+    top: var(--topbar-height);
+    right: 0;
+    bottom: var(--timeline-height);
+    left: auto;
+    width: min(310px, calc(100vw - 20px));
+  }
+
+  .left-panel {
+    left: 10px;
+    width: min(310px, calc(100vw - 20px));
+  }
+
+  .mobile-panel-actions {
+    top: 20px;
+    right: 20px;
   }
 
   .brand-lockup div span,

@@ -36,6 +36,7 @@ export type EditorState = {
   loadProject: (project: AtlasProject) => void;
   updateProjectTitle: (title: string) => void;
   updateBackground: (patch: Partial<BackgroundSettings>) => void;
+  applyBackground: (dataUrl: string, width: number, height: number) => void;
   addObject: (object: SceneObject) => void;
   updateObject: (id: string, patch: SceneObjectPatch) => void;
   removeSelected: () => void;
@@ -141,6 +142,18 @@ export const useEditorStore = create<EditorState>((set, get) => {
     updateBackground: (patch) => {
       const next = cloneProject(get().project);
       next.background = { ...next.background, ...patch };
+      commitProject(next);
+    },
+
+    applyBackground: (dataUrl, width, height) => {
+      const next = cloneProject(get().project);
+      next.width = width;
+      next.height = height;
+      next.background = {
+        ...next.background,
+        dataUrl,
+        opacity: 1,
+      };
       commitProject(next);
     },
 
