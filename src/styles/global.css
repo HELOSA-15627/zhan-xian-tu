@@ -311,7 +311,7 @@ textarea:focus-visible {
 .timeline {
   grid-area: timeline;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 14px;
   padding: 0 18px;
@@ -319,27 +319,58 @@ textarea:focus-visible {
   background: var(--graphite);
 }
 
+.timeline-icon-button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.timeline-icon-button:hover:not(:disabled) {
+  border-color: var(--line);
+  color: var(--text);
+}
+
 .play-button {
-  min-width: 64px;
+  display: inline-flex;
+  min-width: 74px;
   min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
   background: var(--graphite-raised);
   cursor: pointer;
 }
 
-.timeline-track {
-  position: relative;
-  height: 2px;
-  background: var(--line);
+.play-button:disabled,
+.timeline-icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
 }
 
-.timeline-track span {
-  position: absolute;
-  inset: -5px auto -5px 0;
-  width: 12px;
-  border-radius: 50%;
-  background: var(--signal);
+.timeline-center {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.timeline-center input[type="range"] {
+  width: 100%;
+  accent-color: var(--signal);
+}
+
+.timeline-empty {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .timeline-time {
