@@ -187,7 +187,7 @@ it("round-trips a point through screen and world coordinates", () => {
 
 it("fits the map inside a padded viewport", () => {
   expect(fitViewport({ width: 1600, height: 900 }, { width: 1000, height: 700 }, 40))
-    .toEqual({ scale: 0.575, x: 40, y: 121.25 });
+    .toEqual({ scale: 0.575, x: 40, y: 91.25 });
 });
 
 it("keeps the pointer world position fixed while zooming", () => {
