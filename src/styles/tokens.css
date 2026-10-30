@@ -8,20 +8,25 @@
   font-synthesis: none;
   text-rendering: geometricPrecision;
 
-  --ink: #0b0d12;
-  --graphite: #141821;
-  --graphite-raised: #1c2130;
-  --line: #343b4f;
-  --paper: #d8ccb4;
-  --paper-dark: #a99d86;
-  --text: #f2efe8;
-  --muted: #9098aa;
+  --ink: #05090d;
+  --graphite: #0a1116;
+  --graphite-raised: #111b21;
+  --graphite-deep: #071018;
+  --line: #28343a;
+  --line-strong: #445158;
+  --paper: #d8cbb4;
+  --paper-light: #eadfca;
+  --paper-dark: #a59780;
+  --text: #f1eee5;
+  --muted: #8e9a9d;
   --signal: #e3318d;
   --signal-soft: rgb(227 49 141 / 16%);
-  --friendly: #b9e253;
-  --hostile: #e85a4f;
-  --info: #5cc7d8;
-  --warning: #e8b34a;
+  --friendly: #7bcf79;
+  --hostile: #df5f6d;
+  --info: #43b8cb;
+  --warning: #efbd51;
+  --axis: #edc94f;
+  --map-blue: #123345;
 
   --font-ui:
     "IBM Plex Sans",
@@ -30,10 +35,11 @@
     sans-serif;
   --font-data: "IBM Plex Mono", "Microsoft YaHei", monospace;
 
-  --radius-control: 4px;
-  --topbar-height: 48px;
-  --tool-rail-width: 52px;
-  --left-panel-width: 248px;
-  --inspector-width: 284px;
-  --timeline-height: 76px;
+  --radius-control: 2px;
+  --chamfer: 8px;
+  --topbar-height: 58px;
+  --tool-rail-width: 56px;
+  --left-panel-width: 276px;
+  --inspector-width: 286px;
+  --timeline-height: 68px;
 }

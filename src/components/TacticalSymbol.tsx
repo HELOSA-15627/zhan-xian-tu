@@ -1,95 +1,141 @@
-import type { TacticalSymbol as TacticalSymbolName } from "../model/types";
+import { useId } from "react";
+
+import type {
+  CustomArtworkId,
+  FlagArtworkId,
+  MarkerArtworkId,
+  NatoArtworkId,
+  TacticalSymbol as TacticalSymbolName,
+  UnitAffiliation,
+  UnitArtworkId,
+  UnitArtworkSource,
+} from "../model/types";
+import { customArtworkAssetFor } from "../model/customAssets";
+import { flagArtworkAssetFor } from "../model/flags";
+import {
+  AFFILIATION_COLORS,
+  affiliationForSymbol,
+  defaultArtworkForSymbol,
+  natoArtworkAssetFor,
+  unitArtworkAssetFor,
+} from "../model/unitAssets";
 
 type TacticalSymbolProps = {
   symbol: TacticalSymbolName;
   color: string;
   size: number;
+  affiliation?: UnitAffiliation;
+  artwork?: MarkerArtworkId;
+  artworkSource?: UnitArtworkSource;
 };
 
 export function TacticalSymbol({
   symbol,
   color,
   size,
+  affiliation: requestedAffiliation,
+  artwork: requestedArtwork,
+  artworkSource: requestedArtworkSource,
 }: TacticalSymbolProps) {
-  const line = "#0b0d12";
-  const strokeWidth = 2.1;
+  const filterId = `artwork-tint-${useId().replace(/:/g, "")}`;
+  const outlineFilterId = `artwork-outline-${useId().replace(/:/g, "")}`;
+  const affiliation =
+    requestedAffiliation ?? affiliationForSymbol(symbol);
+  const artwork =
+    requestedArtwork ?? defaultArtworkForSymbol(symbol, affiliation);
+  const artworkSource =
+    requestedArtworkSource ??
+    (artwork.startsWith("nato-")
+      ? "nato"
+      : artwork.startsWith("flag-")
+        ? "flag"
+        : artwork.startsWith("custom-")
+          ? "custom"
+        : "psd");
+  const artworkUrl =
+    artworkSource === "flag"
+      ? flagArtworkAssetFor(artwork as FlagArtworkId)
+      : artworkSource === "nato"
+      ? natoArtworkAssetFor(artwork as NatoArtworkId, affiliation)
+      : artworkSource === "custom"
+        ? customArtworkAssetFor(artwork as CustomArtworkId)
+      : unitArtworkAssetFor(artwork as UnitArtworkId, affiliation);
+  const tint = /^#[0-9a-f]{6}$/i.test(color)
+    ? color
+    : AFFILIATION_COLORS[affiliation];
 
   return (
     <svg
       aria-hidden="true"
       className="tactical-symbol"
-      height={size}
-      viewBox="-20 -20 40 40"
+      data-affiliation={affiliation}
+      data-frame={
+        artworkSource === "nato"
+          ? affiliation === "hostile"
+            ? "diamond"
+            : "rectangle"
+          : undefined
+      }
+      data-symbol={symbol}
+      data-symbol-style={artworkSource}
+      height={size * 0.75}
+      shapeRendering="geometricPrecision"
+      viewBox="-56 -42 112 84"
       width={size}
     >
-      <g
-        fill={color}
-        stroke={line}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={strokeWidth}
-        vectorEffect="non-scaling-stroke"
-      >
-        {symbol === "friendly" ? (
+      <defs>
+        {artworkSource === "psd" ? (
           <>
-            <path d="M-12 -8 H5 L13 0 L5 8 H-12 Z" />
-            <path d="M-4 -3 H4 L8 0 L4 3 H-4 Z" fill="none" />
+            <filter id={filterId}>
+              <feFlood floodColor={tint} />
+              <feComposite in2="SourceAlpha" operator="in" />
+            </filter>
+            <filter
+              data-outline-filter="psd-black"
+              id={outlineFilterId}
+            >
+              <feMorphology
+                in="SourceAlpha"
+                operator="dilate"
+                radius="1.35"
+                result="expanded"
+              />
+              <feFlood floodColor="#000000" result="black" />
+              <feComposite
+                in="black"
+                in2="expanded"
+                operator="in"
+                result="outline"
+              />
+            </filter>
           </>
         ) : null}
-        {symbol === "hostile" ? (
-          <>
-            <path d="M0 -13 L13 0 L0 13 L-13 0 Z" />
-            <path d="M-6 0 H6 M0 -6 V6" fill="none" />
-          </>
-        ) : null}
-        {symbol === "headquarters" ? (
-          <>
-            <rect x="-11" y="-9" width="22" height="18" rx="1.5" />
-            <path d="M-5 -2 V-11 L5 -7 V-2 Z" fill={line} />
-            <path d="M-5 -11 V7" fill="none" />
-          </>
-        ) : null}
-        {symbol === "defense" ? (
-          <>
-            <path d="M-14 8 Q0 -16 14 8" fill="none" strokeWidth="4" />
-            <path d="M-9 10 Q0 -7 9 10" fill="none" />
-            <path d="M-13 11 H13" fill="none" strokeDasharray="3 3" />
-          </>
-        ) : null}
-        {symbol === "nest" ? (
-          <>
-            <circle cx="0" cy="0" r="12" fill="none" strokeWidth="3" />
-            <circle cx="0" cy="0" r="6" />
-            <path
-              d="M0 -17 V-13 M0 13 V17 M-17 0 H-13 M13 0 H17"
-              fill="none"
-            />
-          </>
-        ) : null}
-        {symbol === "objective" ? (
-          <>
-            <circle cx="0" cy="0" r="12" fill="none" strokeWidth="2" />
-            <circle cx="0" cy="0" r="5" />
-            <path
-              d="M0 -17 V-9 M0 9 V17 M-17 0 H-9 M9 0 H17"
-              fill="none"
-            />
-          </>
-        ) : null}
-        {symbol === "armor" ? (
-          <>
-            <rect x="-14" y="-8" width="28" height="16" rx="5" />
-            <path d="M-11 -4 H11 M-11 4 H11" fill="none" />
-            <path d="M0 -4 V4" fill="none" stroke={line} />
-          </>
-        ) : null}
-        {symbol === "aviation" ? (
-          <>
-            <path d="M0 -15 L4 -2 L16 8 L8 9 L0 3 L-8 9 L-16 8 L-4 -2 Z" />
-            <path d="M0 -10 V3" fill="none" stroke={line} />
-          </>
-        ) : null}
-      </g>
+      </defs>
+      {artworkSource === "psd" ? (
+        <image
+          data-artwork-layer="outline"
+          data-artwork-outline="psd-black"
+          filter={`url(#${outlineFilterId})`}
+          height="84"
+          href={artworkUrl}
+          preserveAspectRatio="xMidYMid meet"
+          width="112"
+          x="-56"
+          y="-42"
+        />
+      ) : null}
+      <image
+        data-artwork-layer="fill"
+        data-artwork-source={artworkSource}
+        data-unit-artwork={artwork}
+        filter={artworkSource === "psd" ? `url(#${filterId})` : undefined}
+        height="84"
+        href={artworkUrl}
+        preserveAspectRatio="xMidYMid meet"
+        width="112"
+        x="-56"
+        y="-42"
+      />
     </svg>
   );
 }

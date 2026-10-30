@@ -3,6 +3,7 @@ import { EyeSlash } from "@phosphor-icons/react/EyeSlash";
 import { LockSimple } from "@phosphor-icons/react/LockSimple";
 import { LockSimpleOpen } from "@phosphor-icons/react/LockSimpleOpen";
 import { Plus } from "@phosphor-icons/react/Plus";
+import { Trash } from "@phosphor-icons/react/Trash";
 
 import type { SceneObject } from "../model/types";
 import { useEditorStore } from "../store/editorStore";
@@ -31,6 +32,8 @@ export function LayerPanel() {
   const setSelection = useEditorStore((state) => state.setSelection);
   const toggleLayer = useEditorStore((state) => state.toggleLayer);
   const toggleLayerLock = useEditorStore((state) => state.toggleLayerLock);
+  const deleteLayer = useEditorStore((state) => state.deleteLayer);
+  const removeObject = useEditorStore((state) => state.removeObject);
 
   return (
     <section aria-label="图层管理">
@@ -101,23 +104,44 @@ export function LayerPanel() {
                     <LockSimpleOpen aria-hidden="true" size={15} />
                   )}
                 </button>
+                <button
+                  aria-label={`删除图层 ${layer.name}`}
+                  className="icon-button"
+                  disabled={project.layers.length <= 1}
+                  onClick={() => deleteLayer(layer.id)}
+                  type="button"
+                >
+                  <Trash aria-hidden="true" size={15} />
+                </button>
               </div>
               <div className="object-list">
                 {objects.length === 0 ? (
                   <span className="muted-line">此图层还没有标注</span>
                 ) : (
                   objects.map((object) => (
-                    <button
-                      className={`object-row ${
-                        selectedIds.includes(object.id) ? "is-selected" : ""
-                      }`}
-                      key={object.id}
-                      onClick={() => setSelection([object.id])}
-                      type="button"
-                    >
-                      <span className={`object-type type-${object.type}`} />
-                      <span>{objectName(object)}</span>
-                    </button>
+                    <div className="object-row-wrap" key={object.id}>
+                      <button
+                        className={`object-row ${
+                          selectedIds.includes(object.id) ? "is-selected" : ""
+                        }`}
+                        onClick={() => setSelection([object.id])}
+                        type="button"
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`object-type type-${object.type}`}
+                        />
+                        <span>{objectName(object)}</span>
+                      </button>
+                      <button
+                        aria-label={`删除对象 ${objectName(object)}`}
+                        className="object-delete"
+                        onClick={() => removeObject(object.id)}
+                        type="button"
+                      >
+                        <Trash aria-hidden="true" size={13} />
+                      </button>
+                    </div>
                   ))
                 )}
               </div>

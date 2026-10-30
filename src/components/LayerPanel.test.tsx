@@ -38,4 +38,23 @@ describe("layer panel", () => {
 
     expect(useEditorStore.getState().project.layers).toHaveLength(2);
   });
+
+  it("deletes objects and non-final layers from visible controls", async () => {
+    const store = useEditorStore.getState();
+    const marker = createMarker(store.project.layers[0].id, { x: 20, y: 20 });
+    marker.label = "可删除单位";
+    store.addObject(marker);
+    store.addLayer("临时图层");
+    render(<LayerPanel />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "删除对象 可删除单位" }),
+    );
+    expect(useEditorStore.getState().project.objects).toHaveLength(0);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "删除图层 临时图层" }),
+    );
+    expect(useEditorStore.getState().project.layers).toHaveLength(1);
+  });
 });

@@ -9,6 +9,17 @@
     />
     <meta name="theme-color" content="#0b0d12" />
     <title>战线图志</title>
+    <script>
+      if (
+        window.location.protocol === "file:" &&
+        !window.location.pathname.endsWith("/dist/index.html")
+      ) {
+        const standalone = new URL("./dist/index.html", window.location.href);
+        if (window.location.href !== standalone.href) {
+          window.location.replace(standalone.href);
+        }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

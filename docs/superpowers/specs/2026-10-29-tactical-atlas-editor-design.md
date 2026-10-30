@@ -27,7 +27,17 @@
 - 放置战役图标：友军、敌军、指挥部、防线、巢穴、目标、装甲、航空。
 - 绘制带箭头的直线推进路径。
 - 绘制多边形区域和自由手绘线。
+- 箭头的动画头部沿实际曲线路径移动，箭头按当前切线方向旋转，线杆终止于箭头底边。
+- 箭头和手绘线具有总宽度、起点宽度和终点宽度；首尾宽度不同时渲染为填充楔形。
+- 箭头头部大小独立于线宽，支持 PSD、三角、燕尾和枪尖四种样式。
+- 所有连续绘制工具使用可调强度的指针防抖；开放线和双轨线不自动闭合。
+- 区域边界使用实心直线，拐角为尖角且不显示节点圆点。
+- 闭合区域使用与边框同色的半透明填充，边框本身保持实色；点击区域内部可选中既有区域。
+- 区域提供自定义、矩形、椭圆、菱形预设，以及实线、虚线、点线三种边界。
+- 虚线和点线区域可按边界周长调整显示段数。
 - 添加单行或多行文字批注。
+- 兵牌和区域可整体拖动；兵牌不透明度默认 100%。
+- 闭合区域支持几何闭锁：锁定时仍可整体拖动，但不接受节点增删；解锁并选中后可用区域工具在最近边界插入节点。
 - 选中对象后可拖动、旋转、复制、删除，并编辑颜色、线宽、不透明度和尺寸。
 
 ### 3.3 图层
@@ -87,6 +97,9 @@
 - 点击选择对象，Shift 点击追加选择。
 - 拖动选框进行框选。
 - 选中对象后显示四角缩放手柄、旋转手柄和箭头端点手柄。
+- 选择工具可拖动兵牌、箭头、手绘线和区域；拖动过程中不写历史，释放时只记录一次最终位置。
+- 闭合区域勾选“闭锁区域形状”后只能整体移动；取消勾选后，保持选中并切换区域工具可沿最近边界插入节点。
+- 设置面板提供“绘制防抖强度”，0 为原始输入跟随，1 为最强稳定。
 - Delete 删除选中对象。
 - Ctrl/Cmd+D 复制对象。
 - Ctrl/Cmd+Z 撤销，Ctrl/Cmd+Shift+Z 重做。
@@ -95,7 +108,7 @@
 ### 5.3 箭头动画
 
 - 箭头在静态状态下完整可见。
-- 播放时按延迟和持续时间逐步显示描边。
+- 播放时按延迟和持续时间逐步显示路径，箭头随当前线头移动而不是固定在最终终点。
 - 时间线进度取所有箭头动画的最大结束时间。
 - 在导出 PNG 前始终恢复完整静态状态。
 
@@ -109,19 +122,20 @@
 
 | Token | 值 | 用途 |
 |---|---|---|
-| ink | `#0b0d12` | 应用最外层背景 |
-| graphite | `#141821` | 工具栏和面板 |
-| graphite-raised | `#1c2130` | 选中行、浮层和输入框 |
-| line | `#343b4f` | 分隔线和边框 |
-| paper | `#d8ccb4` | 默认地图纸面 |
-| paper-dark | `#a99d86` | 网格和纸面质感 |
+| ink | `#05090d` | 应用最外层背景 |
+| graphite | `#0a1116` | 工具栏和面板 |
+| graphite-raised | `#111b21` | 选中行、浮层和输入框 |
+| line | `#28343a` | 分隔线和边框 |
+| paper | `#d8cbb4` | 默认地图纸面 |
+| paper-dark | `#a59780` | 网格和纸面质感 |
 | text | `#f2efe8` | 深色界面文字 |
 | muted | `#9098aa` | 次级信息 |
 | signal | `#e3318d` | 选中、时间线、主操作 |
-| friendly | `#b9e253` | 友军和防线 |
-| hostile | `#e85a4f` | 敌军和威胁 |
-| info | `#5cc7d8` | 支援、航空和信息 |
-| warning | `#e8b34a` | 目标、提示和警戒 |
+| friendly | `#7bcf79` | 友军、装甲和防线 |
+| hostile | `#df5f6d` | 敌军、BETA 和威胁 |
+| info | `#43b8cb` | 支援、航空和信息 |
+| warning | `#efbd51` | 目标、提示和警戒 |
+| axis | `#edc94f` | 黄色战略轴线和防线 |
 
 界面只使用 `signal` 作为交互强调色。阵营颜色只出现在地图内容与图标库中。
 
@@ -137,7 +151,13 @@
 - 壳体和控件使用 4px 小圆角，地图对象保持锐利几何。
 - 面板以边界和色阶分层，不使用悬浮大卡片。
 - 地图区域叠加极细网格、经纬刻度和少量等高线纹理。
-- 图标采用原创抽象符号，不使用设定集中的角色、标志或扫描图。
+- PSD 原画素材保持绘制时的剪影、目标框和箭头结构，不额外套兵牌框。
+- NATO 兵科兵牌作为独立素材组导入：友军矩形、敌军菱形，不改变 PSD 素材结构。
+- PSD 原画兵牌使用黑色主体外轮廓；NATO 阵营底色保持完全不透明，内部黑色兵科符号使用素材自身颜色。
+- 地图底部 47 面国家国旗作为独立素材组导入，保留原始颜色和比例；素材库使用中文国名，放置时不自动生成批注。
+- 素材库支持按中文或英文名称统一搜索 PSD、NATO 兵牌和国旗。
+- 箭头使用宽色带轴线、折线或双轨防线；自由手绘共享推进带、计划虚线、防线双轨和警戒点线四种笔刷。
+- 参考图用于形状、比例、描边和标注层级复刻，不打包设定集扫描页、作品标志或原画。
 
 ### 6.5 排版原则
 
@@ -203,6 +223,43 @@ type AnimationSpec = {
   repeat: number;
 };
 
+type LineStyle = "solid" | "dashed" | "double" | "dotted";
+type ArrowHeadStyle = "psd" | "triangle" | "chevron" | "spear";
+type RegionShapePreset = "custom" | "rectangle" | "ellipse" | "diamond";
+type RegionLineStyle = "solid" | "dashed" | "dotted";
+type UnitAffiliation = "friendly" | "hostile" | "objective";
+
+type UnitArtworkId =
+  | "friendly-fighter"
+  | "hostile-fighter"
+  | "friendly-naval"
+  | "friendly-artillery"
+  | "friendly-tank"
+  | "friendly-helicopter"
+  | "hostile-heavy"
+  | "hostile-fortress"
+  | "hostile-crawler"
+  | "friendly-hovercraft"
+  | "hostile-scout"
+  | "hostile-crawler-biped"
+  | "hostile-artillery"
+  | "target-frame"
+  | "arrow-head"
+  | "friendly-fighter-clean"
+  | "hostile-nest"
+  | "hostile-destroyed";
+type NatoArtworkId =
+  | "nato-infantry"
+  | "nato-armor"
+  | "nato-artillery"
+  | "nato-recon"
+  | "nato-rotary"
+  | "nato-fixed-wing"
+  | "nato-naval"
+  | "nato-headquarters";
+type FlagArtworkId = `flag-${string}`;
+type UnitArtworkSource = "psd" | "nato" | "flag";
+
 type SceneObject =
   | {
       id: string;
@@ -215,6 +272,9 @@ type SceneObject =
       opacity: number;
       color: string;
       symbol: TacticalSymbol;
+      affiliation: UnitAffiliation;
+      artwork: UnitArtworkId | NatoArtworkId;
+      artworkSource: UnitArtworkSource;
       label: string;
     }
   | {
@@ -223,9 +283,16 @@ type SceneObject =
       type: "arrow";
       start: Point;
       end: Point;
+      points: Point[];
       color: string;
       width: number;
+      headSize: number;
+      headStyle: ArrowHeadStyle;
       opacity: number;
+      startWidth: number;
+      endWidth: number;
+      lineStyle: LineStyle;
+      tint: UnitAffiliation;
       dashed: boolean;
       animation: AnimationSpec;
       label: string;
@@ -235,6 +302,11 @@ type SceneObject =
       layerId: string;
       type: "region";
       points: Point[];
+      closed: boolean;
+      geometryLocked: boolean;
+      shapePreset: RegionShapePreset;
+      lineStyle: RegionLineStyle;
+      lineDashCount: number;
       fill: string;
       stroke: string;
       strokeWidth: number;
@@ -261,6 +333,9 @@ type SceneObject =
       color: string;
       strokeWidth: number;
       opacity: number;
+      startWidth: number;
+      endWidth: number;
+      lineStyle: LineStyle;
       label: string;
     };
 ```
@@ -302,6 +377,15 @@ type AtlasProject = {
 - 拖入一张 1600x900 PNG 后，底图和画布尺寸正确更新。
 - 能绘制至少 8 类图标、箭头、区域、文字和手绘线。
 - 箭头播放时从起点到终点逐步出现，拖动时间线可改变进度。
+- 动画播放时箭头随路径头部移动并保持可见，线杆与箭头底边不留缝隙或重叠。
+- 箭头头部大小可独立调整，四种箭头样式都可播放动画且保持线头连接。
+- 变宽线可设置首尾宽度；双轨线保持两条独立开放路径且没有额外描边。
+- 兵牌默认 100% 不透明，可通过属性面板调整完整兵牌组的透明度。
+- 区域边界为实心直线、尖角和零节点圆点；锁定后可拖动，解锁后可插入节点。
+- 区域可在四种形状预设间切换，并可应用实线、虚线或点线边界。
+- 虚线或点线区域的段数可通过滑块调整，边界周长变化后自动重新计算段长。
+- 国旗素材组包含地图底部的 47 面旗帜，素材库以中文国名显示，放置时不自动添加批注。
+- 搜索框可用中文或英文名称同时检索 PSD、NATO 兵牌和国旗。
 - 撤销、重做可恢复对象创建、移动和删除。
 - 刷新页面后恢复最后一次自动保存。
 - 导出项目 JSON 后可重新导入且对象数量、属性和底图保持不变。
@@ -310,6 +394,7 @@ type AtlasProject = {
 
 ## 10. 素材与版权边界
 
-- 设定集仅用于归纳色彩、线型、标注层级与图形语法。
+- 用户提供的 14 张参考图用于复刻色彩、图标轮廓、线型、标注层级与界面材质。
+- 参考图文件只保存在 `tmp/tactical-atlas-reference-images` 供开发比对，不进入运行时构建。
 - 不把设定集扫描页、角色、组织徽标、作品 Logo 或机甲原画打包进应用。
-- 内置图标、示例地图和界面纹理由项目原创绘制。
+- NATO 兵牌使用独立生成的 SVG；PSD 透明 PNG 由用户提供的图层清理、重新着色后生成。两类素材不互相嵌套。

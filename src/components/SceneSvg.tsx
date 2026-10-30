@@ -1,16 +1,26 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 
+import { getArrowAnimationProgress } from "../model/animation";
+import { flagArtworkAssetFor } from "../model/flags";
+import { lineDashArray, normalizeLineStyle } from "../model/lineStyle";
+import { smoothPathData, trimPathEnd } from "../model/path";
 import {
-  arrowDashState,
-  getArrowAnimationProgress,
-} from "../model/animation";
+  buildOpenOffsetPath,
+  buildTaperedRibbon,
+  clipSmoothPathToProgress,
+  pathFrameAtProgress,
+} from "../model/strokeGeometry";
+import { buildRegionDashArray } from "../model/regionGeometry";
 import type {
   ArrowObject,
+  ArrowHeadStyle,
   AtlasProject,
+  FlagAttachment,
   Layer,
   Point,
   SceneObject,
 } from "../model/types";
+import { arrowHeadAssetForTint } from "../model/unitAssets";
 import { TacticalSymbol } from "./TacticalSymbol";
 
 type SceneSvgProps = {
@@ -24,24 +34,86 @@ type SceneSvgProps = {
   ) => void;
 };
 
-function lineLength(start: Point, end: Point): number {
-  return Math.hypot(end.x - start.x, end.y - start.y);
+function arrowPoints(arrow: ArrowObject): Point[] {
+  return arrow.points?.length >= 2
+    ? arrow.points
+    : [arrow.start, arrow.end];
 }
 
-function arrowHead(arrow: ArrowObject): string {
-  const angle = Math.atan2(arrow.end.y - arrow.start.y, arrow.end.x - arrow.start.x);
-  const size = Math.max(14, arrow.width * 2.4);
+function pointMetadata(point: Point): string {
+  const round = (value: number) => Math.round(value * 1000) / 1000;
+  return `${round(point.x)},${round(point.y)}`;
+}
 
-  const pointA = {
-    x: arrow.end.x - Math.cos(angle - Math.PI / 7) * size,
-    y: arrow.end.y - Math.sin(angle - Math.PI / 7) * size,
-  };
-  const pointB = {
-    x: arrow.end.x - Math.cos(angle + Math.PI / 7) * size,
-    y: arrow.end.y - Math.sin(angle + Math.PI / 7) * size,
-  };
+function attachedFlagGeometry(attachment: FlagAttachment, markerSize: number) {
+  const width = attachment.size;
+  const height = width * (60 / 109);
+  const gap = 4;
+  const halfMarker = markerSize / 2;
 
-  return `${arrow.end.x},${arrow.end.y} ${pointA.x},${pointA.y} ${pointB.x},${pointB.y}`;
+  switch (attachment.position) {
+    case "top":
+      return { x: 0, y: -halfMarker - height / 2 - gap, width, height };
+    case "right":
+      return { x: halfMarker + width / 2 + gap, y: 0, width, height };
+    case "bottom":
+      return { x: 0, y: halfMarker + height / 2 + gap, width, height };
+    case "left":
+      return { x: -halfMarker - width / 2 - gap, y: 0, width, height };
+    case "center":
+      return { x: 0, y: 0, width, height };
+  }
+}
+
+function AttachedFlag({
+  attachment,
+  markerSize,
+}: {
+  attachment: FlagAttachment;
+  markerSize: number;
+}) {
+  const { x, y, width, height } = attachedFlagGeometry(
+    attachment,
+    markerSize,
+  );
+
+  return (
+    <g
+      data-attached-flag="true"
+      data-flag-position={attachment.position}
+      data-flag-size={attachment.size}
+      transform={`translate(${x} ${y})`}
+    >
+      <image
+        height={height}
+        href={flagArtworkAssetFor(attachment.artwork)}
+        preserveAspectRatio="xMidYMid meet"
+        width={width}
+        x={-width / 2}
+        y={-height / 2}
+      />
+    </g>
+  );
+}
+
+function arrowHeadPath(style: ArrowHeadStyle, size: number): string {
+  switch (style) {
+    case "triangle":
+      return `M 0 0 L ${-size * 0.55} ${size} L ${size * 0.55} ${size} Z`;
+    case "chevron":
+      return `M 0 0 L ${-size * 0.58} ${size * 0.68} L ${-size * 0.24} ${size * 0.8} L 0 ${size * 0.55} L ${size * 0.24} ${size * 0.8} L ${size * 0.58} ${size * 0.68} Z`;
+    case "spear":
+      return `M 0 0 L ${-size * 0.46} ${size * 0.72} L ${-size * 0.12} ${size * 0.6} L ${-size * 0.12} ${size} L ${size * 0.12} ${size} L ${size * 0.12} ${size * 0.6} L ${size * 0.46} ${size * 0.72} Z`;
+    case "psd":
+      return "";
+  }
+}
+
+function arrowHeadConnectionLength(
+  style: ArrowHeadStyle,
+  size: number,
+): number {
+  return style === "chevron" ? size * 0.56 : size;
 }
 
 function objectPoints(object: SceneObject): Point[] {
@@ -52,7 +124,7 @@ function objectPoints(object: SceneObject): Point[] {
         { x: object.x + object.size / 2, y: object.y + object.size / 2 },
       ];
     case "arrow":
-      return [object.start, object.end];
+      return arrowPoints(object);
     case "region":
     case "freehand":
       return object.points;
@@ -88,7 +160,7 @@ function Label({
   text,
   x,
   y,
-  dark = false,
+  dark = true,
 }: {
   text: string;
   x: number;
@@ -102,11 +174,11 @@ function Label({
       className="scene-label"
       fill={dark ? "#1f2430" : "#f2efe8"}
       fontFamily="'IBM Plex Sans', 'Microsoft YaHei', sans-serif"
-      fontSize="13"
+      fontSize="11.5"
       fontWeight="600"
       paintOrder="stroke"
       stroke={dark ? "#d8ccb4" : "#0b0d12"}
-      strokeWidth="4"
+      strokeWidth="3.2"
       textAnchor="middle"
       x={x}
       y={y}
@@ -127,119 +199,229 @@ function ObjectNode({
     case "marker":
       return (
         <g
+          data-marker-style="atlas"
           data-object-id={object.id}
           data-object-type="marker"
           opacity={object.opacity}
           transform={`translate(${object.x} ${object.y}) rotate(${object.rotation})`}
         >
-          <circle
-            cx="0"
-            cy="0"
-            fill={object.color}
-            opacity="0.18"
-            r={object.size * 0.82}
-          />
-          <circle
-            cx="0"
-            cy="0"
-            fill="none"
-            opacity="0.58"
-            r={object.size * 0.58}
-            stroke={object.color}
-            strokeDasharray="2 4"
-            strokeWidth="1"
-          />
           <g transform={`translate(${-object.size / 2} ${-object.size / 2})`}>
             <TacticalSymbol
+              affiliation={object.affiliation}
+              artwork={object.artwork}
+              artworkSource={object.artworkSource}
               color={object.color}
               size={object.size}
               symbol={object.symbol}
             />
           </g>
+          {object.flagAttachment ? (
+            <AttachedFlag
+              attachment={object.flagAttachment}
+              markerSize={object.size}
+            />
+          ) : null}
           <Label
             text={object.label}
             x={0}
-            y={object.size / 2 + 18}
+            y={object.size / 2 + 16}
           />
         </g>
       );
     case "arrow": {
-      const length = lineLength(object.start, object.end);
+      const points = arrowPoints(object);
+      const style = normalizeLineStyle(object.lineStyle);
       const progress =
         time === null
           ? 1
           : getArrowAnimationProgress(object.animation, time);
-      const animatedDash = arrowDashState(length, progress);
-      const dashProps =
-        time === null
-          ? object.dashed
-            ? { strokeDasharray: "14 9" }
-            : {}
-          : {
-              strokeDasharray: animatedDash.dasharray,
-              strokeDashoffset: animatedDash.dashoffset,
-            };
+      const headSize = object.headSize;
+      const headConnectionLength = arrowHeadConnectionLength(
+        object.headStyle,
+        headSize,
+      );
+      const headFrame = pathFrameAtProgress(points, progress);
+      const visiblePath = clipSmoothPathToProgress(points, progress);
+      const shaft = trimPathEnd(visiblePath, headConnectionLength);
+      const shaftPath = smoothPathData(shaft);
+      const lineEnd = shaft.at(-1) ?? headFrame.point;
+      const headBasePoint = lineEnd;
+      const headAngle = (headFrame.angle * 180) / Math.PI + 90;
+      const effectiveEndWidth =
+        object.startWidth +
+        (object.endWidth - object.startWidth) * progress;
+      const controlWidth = Math.max(
+        object.width,
+        (object.startWidth + effectiveEndWidth) / 2,
+      );
+      const hasVisibleShaft = shaft.length >= 2;
+      const labelPoint =
+        points[Math.min(points.length - 1, Math.floor(points.length / 2))] ??
+        object.end;
+      const dash = lineDashArray(
+        style,
+        (object.startWidth + effectiveEndWidth) / 2,
+      );
+      const dashProps = dash ? { strokeDasharray: dash } : {};
 
       return (
         <g
+          data-line-style={style}
           data-object-id={object.id}
           data-object-type="arrow"
+          data-path-points={points.length}
           opacity={object.opacity}
         >
-          <line
-            {...dashProps}
-            opacity="0.46"
-            stroke="#0b0d12"
-            strokeLinecap="round"
-            strokeWidth={object.width + 4}
-            x1={object.start.x}
-            x2={object.end.x}
-            y1={object.start.y}
-            y2={object.end.y}
-          />
-          <line
-            {...dashProps}
-            stroke={object.color}
-            strokeLinecap="round"
-            strokeWidth={object.width}
-            x1={object.start.x}
-            x2={object.end.x}
-            y1={object.start.y}
-            y2={object.end.y}
-          />
-          <polygon
-            fill="#0b0d12"
-            opacity={progress > 0.92 ? 0.7 : 0}
-            points={arrowHead({
-              ...object,
-              end: {
-                x: object.end.x + 1.5,
-                y: object.end.y + 1.5,
-              },
-            })}
-          />
-          <polygon
-            fill={object.color}
-            opacity={progress > 0.92 ? 1 : 0}
-            points={arrowHead(object)}
-          />
+          {style === "double" ? (
+            <>
+              {[-1, 1].map((direction) => {
+                const rail = buildOpenOffsetPath(
+                  shaft,
+                  direction * Math.max(3, controlWidth * 0.5),
+                );
+                return (
+                  <path
+                    {...dashProps}
+                    data-line-end={pointMetadata(lineEnd)}
+                    data-line-role="rail"
+                    d={rail}
+                    fill="none"
+                    key={direction}
+                    stroke={object.color}
+                    strokeLinecap="butt"
+                    strokeLinejoin="miter"
+                    strokeWidth={Math.max(
+                      1.5,
+                      controlWidth * 0.19,
+                    )}
+                  />
+                );
+              })}
+            </>
+          ) : hasVisibleShaft &&
+            style === "solid" &&
+            object.startWidth !== effectiveEndWidth ? (
+            <path
+              data-line-end={pointMetadata(lineEnd)}
+              data-line-role="shaft"
+              data-width-shape="tapered"
+              d={buildTaperedRibbon(
+                shaft,
+                object.startWidth,
+                effectiveEndWidth,
+              )}
+              fill={object.color}
+              stroke="none"
+            />
+          ) : hasVisibleShaft ? (
+            <path
+              {...dashProps}
+              data-line-end={pointMetadata(lineEnd)}
+              data-line-role="shaft"
+              data-width-shape="uniform"
+              d={shaftPath}
+              fill="none"
+              stroke={object.color}
+              strokeLinecap={style === "dotted" ? "round" : "butt"}
+              strokeLinejoin="miter"
+              strokeWidth={Math.max(
+                1,
+                (object.startWidth + effectiveEndWidth) / 2,
+              )}
+            />
+          ) : null}
+          <g
+            data-arrow-head="true"
+            data-arrow-head-point={pointMetadata(headFrame.point)}
+            data-head-base-point={pointMetadata(headBasePoint)}
+            data-head-origin="base"
+            data-head-size={headSize}
+            data-head-style={object.headStyle}
+            opacity="1"
+            transform={`translate(${headFrame.point.x} ${headFrame.point.y}) rotate(${headAngle})`}
+          >
+            {object.headStyle === "psd" ? (
+              <image
+                height={headSize}
+                href={arrowHeadAssetForTint(object.tint)}
+                preserveAspectRatio="xMidYMid meet"
+                width={headSize}
+                x={-headSize / 2}
+                y={0}
+              />
+            ) : (
+              <path
+                data-arrow-head-fill="true"
+                d={arrowHeadPath(object.headStyle, headSize)}
+                fill={object.color}
+                stroke="none"
+              />
+            )}
+          </g>
           <Label
             text={object.label}
-            x={(object.start.x + object.end.x) / 2}
-            y={(object.start.y + object.end.y) / 2 - object.width - 8}
+            x={labelPoint.x}
+            y={labelPoint.y - object.width - 8}
           />
         </g>
       );
     }
     case "region":
       return (
-        <g data-object-id={object.id} data-object-type="region" opacity={object.opacity}>
-          <polygon
-            fill={object.fill}
-            points={object.points.map((point) => `${point.x},${point.y}`).join(" ")}
-            stroke={object.stroke}
-            strokeWidth={object.strokeWidth}
-          />
+        <g
+          data-object-id={object.id}
+          data-object-type="region"
+          data-region-shape={object.shapePreset}
+        >
+          {object.closed ? (
+            <polygon
+              data-line-role="hit"
+              fill="transparent"
+              points={object.points
+                .map((point) => `${point.x},${point.y}`)
+                .join(" ")}
+              pointerEvents="all"
+            />
+          ) : (
+            <polyline
+              data-line-role="hit"
+              fill="none"
+              points={object.points
+                .map((point) => `${point.x},${point.y}`)
+                .join(" ")}
+              pointerEvents="stroke"
+              stroke="transparent"
+              strokeWidth={Math.max(12, object.strokeWidth + 8)}
+            />
+          )}
+          {object.closed ? (
+            <polygon
+              data-line-role="boundary"
+              data-region-closed="true"
+              data-region-line-style={object.lineStyle}
+              fill={object.stroke}
+              fillOpacity={object.opacity}
+              points={object.points.map((point) => `${point.x},${point.y}`).join(" ")}
+              stroke={object.stroke}
+              strokeDasharray={buildRegionDashArray(object)}
+              strokeLinecap="butt"
+              strokeLinejoin="miter"
+              strokeWidth={object.strokeWidth}
+            />
+          ) : (
+            <polyline
+              data-line-role="boundary"
+              data-region-closed="false"
+              data-region-line-style={object.lineStyle}
+              fill="none"
+              points={object.points.map((point) => `${point.x},${point.y}`).join(" ")}
+              stroke={object.stroke}
+              strokeDasharray={buildRegionDashArray(object)}
+              strokeLinecap="butt"
+              strokeLinejoin="miter"
+              strokeWidth={object.strokeWidth}
+            />
+          )}
           {object.label ? (
             <Label
               text={object.label}
@@ -282,22 +464,66 @@ function ObjectNode({
         </g>
       );
     case "freehand":
+      {
+        const style = normalizeLineStyle(object.lineStyle);
+        const averageWidth = (object.startWidth + object.endWidth) / 2;
+        const controlWidth = Math.max(object.strokeWidth, averageWidth);
+        const dash = lineDashArray(style, averageWidth);
+        const path = smoothPathData(object.points);
       return (
         <g
+          data-line-style={style}
           data-object-id={object.id}
           data-object-type="freehand"
           opacity={object.opacity}
         >
-          <polyline
-            fill="none"
-            points={object.points.map((point) => `${point.x},${point.y}`).join(" ")}
-            stroke={object.color}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={object.strokeWidth}
-          />
+          {style === "double" ? (
+            <>
+              {[-1, 1].map((direction) => (
+                <path
+                  data-line-role="rail"
+                  d={buildOpenOffsetPath(
+                    object.points,
+                    direction * Math.max(3, controlWidth * 0.8),
+                  )}
+                  fill="none"
+                  key={direction}
+                  stroke={object.color}
+                  strokeLinecap="butt"
+                  strokeLinejoin="miter"
+                  strokeWidth={Math.max(1.5, controlWidth * 0.35)}
+                />
+              ))}
+            </>
+          ) : style === "solid" &&
+            object.startWidth !== object.endWidth ? (
+            <path
+              data-line-role="band"
+              data-width-shape="tapered"
+              d={buildTaperedRibbon(
+                object.points,
+                object.startWidth,
+                object.endWidth,
+              )}
+              fill={object.color}
+              stroke="none"
+            />
+          ) : (
+            <path
+              data-line-role="band"
+              data-width-shape="uniform"
+              d={path}
+              fill="none"
+              stroke={object.color}
+              strokeDasharray={dash}
+              strokeLinecap={style === "dotted" ? "round" : "butt"}
+              strokeLinejoin="miter"
+              strokeWidth={Math.max(1, averageWidth)}
+            />
+          )}
         </g>
       );
+      }
   }
 }
 

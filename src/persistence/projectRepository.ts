@@ -3,6 +3,23 @@ import type {
   Layer,
   SceneObject,
 } from "../model/types";
+import { isLineStyle } from "../model/lineStyle";
+import { normalizeStrokeWidth } from "../model/project";
+import {
+  defaultFlagArtwork,
+  isFlagArtwork,
+  normalizeFlagAttachment,
+} from "../model/flags";
+import { isCustomArtwork } from "../model/customAssets";
+import {
+  affiliationForSymbol,
+  artworkSourceFor,
+  defaultArtworkForSymbol,
+  defaultNatoArtworkForSymbol,
+  isNatoArtwork,
+  isPsdArtwork,
+  UNIT_TINTS,
+} from "../model/unitAssets";
 
 const DATABASE_NAME = "tactical-atlas";
 const DATABASE_VERSION = 1;
@@ -134,7 +151,121 @@ function validateProject(value: unknown): AtlasProject {
     throw new Error("项目文件格式无效");
   }
 
-  return value as AtlasProject;
+  const project = value as AtlasProject;
+  return {
+    ...project,
+    objects: project.objects.map((object) => {
+      if (object.type === "marker") {
+        const next = structuredClone(object);
+        let source =
+          next.artworkSource ??
+          (next.artwork ? artworkSourceFor(next.artwork) : "psd");
+        if ((next.artwork as string) === "hostile-nest") {
+          source = "custom";
+          next.artwork = "custom-nest";
+          next.artworkSource = source;
+        }
+        const affiliation = UNIT_TINTS.includes(next.affiliation)
+          ? next.affiliation
+          : affiliationForSymbol(next.symbol);
+        next.affiliation = affiliation;
+        next.artworkSource = source;
+        if (source === "nato") {
+          next.affiliation =
+            affiliation === "hostile" ? "hostile" : "friendly";
+          next.artwork = isNatoArtwork(next.artwork)
+            ? next.artwork
+            : defaultNatoArtworkForSymbol(next.symbol);
+        } else if (source === "flag") {
+          next.affiliation =
+            affiliation === "hostile" ? "hostile" : "friendly";
+          next.artwork = isFlagArtwork(next.artwork)
+            ? next.artwork
+            : defaultFlagArtwork();
+          next.label = typeof next.label === "string" ? next.label : "";
+        } else if (source === "custom") {
+          next.artwork = isCustomArtwork(next.artwork)
+            ? next.artwork
+            : "custom-nest";
+        } else {
+          next.artwork = isPsdArtwork(next.artwork)
+            ? next.artwork
+            : defaultArtworkForSymbol(next.symbol, affiliation);
+        }
+        next.opacity = Math.min(
+          1,
+          Math.max(0, typeof next.opacity === "number" ? next.opacity : 1),
+        );
+        next.flagAttachment = normalizeFlagAttachment(next.flagAttachment);
+        return next;
+      }
+
+      if (object.type === "region") {
+        const next = structuredClone(object);
+        next.closed = next.closed !== false;
+        next.geometryLocked = next.geometryLocked === true;
+        next.shapePreset = ["rectangle", "ellipse", "diamond"].includes(
+          next.shapePreset,
+        )
+          ? next.shapePreset
+          : "custom";
+        next.lineStyle = ["dashed", "dotted"].includes(next.lineStyle)
+          ? next.lineStyle
+          : "solid";
+        next.lineDashCount = Math.min(
+          80,
+          Math.max(
+            4,
+            Number.isFinite(next.lineDashCount)
+              ? Math.round(next.lineDashCount)
+              : 24,
+          ),
+        );
+        next.fill = next.stroke;
+        return next;
+      }
+
+      if (object.type !== "arrow" && object.type !== "freehand") {
+        return object;
+      }
+
+      const next = structuredClone(object);
+      const baseWidth =
+        next.type === "arrow" ? next.width : next.strokeWidth;
+      next.startWidth = normalizeStrokeWidth(next.startWidth, baseWidth);
+      next.endWidth = normalizeStrokeWidth(next.endWidth, baseWidth);
+      if (next.type === "arrow") {
+        next.headSize = Math.min(
+          160,
+          Math.max(
+            12,
+            typeof next.headSize === "number" ? next.headSize : 34,
+          ),
+        );
+        next.headStyle = ["triangle", "chevron", "spear"].includes(
+          next.headStyle,
+        )
+          ? next.headStyle
+          : "psd";
+        next.points =
+          next.points?.length >= 2
+            ? next.points
+            : [next.start, next.end];
+        next.tint = UNIT_TINTS.includes(next.tint)
+          ? next.tint
+          : next.color === "#92cf00"
+            ? "friendly"
+            : next.color === "#9b351f"
+              ? "hostile"
+              : "objective";
+      }
+      if (!isLineStyle(next.lineStyle)) {
+        next.lineStyle =
+          next.type === "arrow" && next.dashed ? "dashed" : "solid";
+      }
+      return next;
+    }),
+  };
 }
 
 export async function saveProject(project: AtlasProject): Promise<void> {

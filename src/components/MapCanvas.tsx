@@ -13,13 +13,37 @@ import {
   zoomAt,
 } from "../model/geometry";
 import {
-  createArrow,
+  createArrowPath,
   createFreehand,
   createMarker,
   createRegion,
   createText,
 } from "../model/project";
-import type { Point, SceneObject } from "../model/types";
+import { lineDashArray } from "../model/lineStyle";
+import {
+  appendStabilizedPoint,
+  finalAngle,
+  measurePath,
+  smoothPathData,
+  trimPathEnd,
+} from "../model/path";
+import {
+  canInsertRegionVertex,
+  insertRegionVertex,
+  nearestRegionBoundaryPoint,
+  regionContainsPoint,
+} from "../model/regionGeometry";
+import { buildOpenOffsetPath } from "../model/strokeGeometry";
+import type {
+  LineStyle,
+  Point,
+  SceneObject,
+  UnitAffiliation,
+} from "../model/types";
+import {
+  arrowHeadAssetForTint,
+  AFFILIATION_COLORS,
+} from "../model/unitAssets";
 import { useEditorStore } from "../store/editorStore";
 import { SceneSvg } from "./SceneSvg";
 
@@ -27,10 +51,7 @@ type MapCanvasProps = {
   animationTime?: number | null;
 };
 
-type ArrowDraft = {
-  start: Point;
-  end: Point;
-};
+type ArrowDraft = Point[];
 
 type FreehandDraft = Point[];
 
@@ -38,6 +59,12 @@ type ObjectDrag = {
   objectId: string;
   start: Point;
   last: Point;
+};
+
+type ClickPlacement = {
+  tool: "marker" | "text" | "region";
+  start: Point;
+  pointerId: number;
 };
 
 function localPoint(
@@ -62,6 +89,62 @@ function compactPoints(points: Point[]): Point[] {
   );
 }
 
+function DraftArrow({
+  draft,
+  lineStyle,
+  tint,
+}: {
+  draft: ArrowDraft;
+  lineStyle: LineStyle;
+  tint: UnitAffiliation;
+}) {
+  if (draft.length < 2) return null;
+  const dash = lineDashArray(lineStyle, 8);
+  const end = draft.at(-1) as Point;
+  const angle = finalAngle(draft);
+  const headSize = 34;
+  const shaft = trimPathEnd(draft, headSize);
+  const color = AFFILIATION_COLORS[tint];
+
+  return (
+    <g data-line-style={lineStyle}>
+      {lineStyle === "double" ? (
+        [-1, 1].map((direction) => (
+          <path
+            d={buildOpenOffsetPath(shaft, direction * 5)}
+            fill="none"
+            key={direction}
+            stroke={color}
+            strokeDasharray={dash}
+            strokeLinecap="butt"
+            strokeLinejoin="miter"
+            strokeWidth="3"
+          />
+        ))
+      ) : (
+        <path
+          d={smoothPathData(shaft)}
+          fill="none"
+          stroke={color}
+          strokeDasharray={dash}
+          strokeLinecap="butt"
+          strokeLinejoin="miter"
+          strokeWidth="8"
+        />
+      )}
+      <image
+        data-arrow-head-preview="true"
+        height={headSize}
+        href={arrowHeadAssetForTint(tint)}
+        transform={`translate(${end.x} ${end.y}) rotate(${(angle * 180) / Math.PI + 90})`}
+        width={headSize}
+        x={-headSize / 2}
+        y={0}
+      />
+    </g>
+  );
+}
+
 export function MapCanvas({ animationTime = null }: MapCanvasProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const panRef = useRef<{
@@ -70,6 +153,7 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
     viewportY: number;
   } | null>(null);
   const objectDragRef = useRef<ObjectDrag | null>(null);
+  const clickPlacementRef = useRef<ClickPlacement | null>(null);
   const [arrowDraft, setArrowDraft] = useState<ArrowDraft | null>(null);
   const [freehandDraft, setFreehandDraft] = useState<FreehandDraft>([]);
   const [regionDraft, setRegionDraft] = useState<Point[]>([]);
@@ -80,6 +164,15 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
   const selectedIds = useEditorStore((state) => state.selectedIds);
   const activeLayerId = useEditorStore((state) => state.activeLayerId);
   const activeSymbol = useEditorStore((state) => state.activeSymbol);
+  const activeAffiliation = useEditorStore(
+    (state) => state.activeAffiliation,
+  );
+  const activeArtwork = useEditorStore((state) => state.activeArtwork);
+  const activeArtworkSource = useEditorStore(
+    (state) => state.activeArtworkSource,
+  );
+  const activeLineStyle = useEditorStore((state) => state.activeLineStyle);
+  const strokeDamping = useEditorStore((state) => state.strokeDamping);
   const setViewport = useEditorStore((state) => state.setViewport);
   const setTool = useEditorStore((state) => state.setTool);
   const setSelection = useEditorStore((state) => state.setSelection);
@@ -177,18 +270,55 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
       return;
     }
 
-    if (tool === "marker") {
-      addObject(createMarker(activeLayerId, world, activeSymbol));
-      return;
+    if (tool === "region" && selectedIds.length === 1) {
+      const region = project.objects.find(
+        (object) =>
+          object.id === selectedIds[0] && object.type === "region",
+      );
+      if (region?.type === "region") {
+        const hit = nearestRegionBoundaryPoint(region, world);
+        if (hit.distance <= 12 / Math.max(0.25, viewport.scale)) {
+          if (canInsertRegionVertex(region)) {
+            const next = insertRegionVertex(region, world);
+            updateObject(region.id, { points: next.points });
+          }
+          return;
+        }
+      }
     }
 
-    if (tool === "text") {
-      addObject(createText(activeLayerId, world));
+    if (tool === "region") {
+      const hitRegion = [...project.objects]
+        .reverse()
+        .find((object) => {
+          if (object.type !== "region") return false;
+          const layer = project.layers.find(
+            (item) => item.id === object.layerId,
+          );
+          return Boolean(
+            layer?.visible &&
+              !layer.locked &&
+              regionContainsPoint(object, world),
+          );
+        });
+      if (hitRegion) {
+        setSelection([hitRegion.id]);
+        return;
+      }
+    }
+
+    if (tool === "marker" || tool === "text" || tool === "region") {
+      clickPlacementRef.current = {
+        tool,
+        start: world,
+        pointerId: event.pointerId,
+      };
+      event.currentTarget.setPointerCapture?.(event.pointerId);
       return;
     }
 
     if (tool === "arrow") {
-      setArrowDraft({ start: world, end: world });
+      setArrowDraft([world]);
       event.currentTarget.setPointerCapture?.(event.pointerId);
       return;
     }
@@ -196,11 +326,6 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
     if (tool === "freehand") {
       setFreehandDraft([world]);
       event.currentTarget.setPointerCapture?.(event.pointerId);
-      return;
-    }
-
-    if (tool === "region") {
-      setRegionDraft((points) => [...points, world]);
       return;
     }
 
@@ -222,19 +347,41 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
     }
 
     if (arrowDraft) {
-      setArrowDraft({ ...arrowDraft, end: toWorld(event) });
+      const coalesced = event.nativeEvent.getCoalescedEvents?.();
+      const samples =
+        coalesced && coalesced.length > 0 ? coalesced : [event.nativeEvent];
+      setArrowDraft((points) =>
+        samples.reduce(
+          (next, sample) =>
+            appendStabilizedPoint(next, toWorld(sample), {
+              smoothing: Math.max(0.08, 1 - strokeDamping),
+            }),
+          points ?? [],
+        ),
+      );
       return;
     }
 
     if (freehandDraft.length > 0) {
-      const next = toWorld(event);
-      setFreehandDraft((points) => compactPoints([...points, next]));
+      const coalesced = event.nativeEvent.getCoalescedEvents?.();
+      const samples =
+        coalesced && coalesced.length > 0 ? coalesced : [event.nativeEvent];
+      setFreehandDraft((points) =>
+        samples.reduce(
+          (next, sample) =>
+            appendStabilizedPoint(next, toWorld(sample), {
+              smoothing: Math.max(0.08, 1 - strokeDamping),
+            }),
+          points,
+        ),
+      );
       return;
     }
 
     if (objectDragRef.current) {
       objectDragRef.current.last = toWorld(event);
     }
+
   };
 
   const handlePointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -243,17 +390,63 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
       return;
     }
 
+    if (clickPlacementRef.current) {
+      const placement = clickPlacementRef.current;
+      clickPlacementRef.current = null;
+      const end = toWorld(event);
+      const moved = Math.hypot(
+        end.x - placement.start.x,
+        end.y - placement.start.y,
+      );
+      if (moved > 4) return;
+
+      if (placement.tool === "marker") {
+        addObject(
+          createMarker(activeLayerId, placement.start, activeSymbol, {
+            affiliation: activeAffiliation,
+            artwork: activeArtwork,
+            artworkSource: activeArtworkSource,
+          }),
+        );
+      } else if (placement.tool === "text") {
+        addObject(createText(activeLayerId, placement.start));
+      } else {
+        setRegionDraft((points) =>
+          appendStabilizedPoint(points, placement.start, {
+            minDistance: 3,
+            smoothing: 0.8,
+          }),
+        );
+      }
+      return;
+    }
+
     if (arrowDraft) {
       const end = toWorld(event);
-      if (Math.hypot(end.x - arrowDraft.start.x, end.y - arrowDraft.start.y) > 4) {
-        addObject(createArrow(activeLayerId, arrowDraft.start, end));
+      const points = [...arrowDraft, end];
+      if (measurePath(points) > 4) {
+        addObject(
+          createArrowPath(
+            activeLayerId,
+            points,
+            activeLineStyle,
+            activeAffiliation,
+          ),
+        );
       }
       setArrowDraft(null);
       return;
     }
 
     if (freehandDraft.length >= 2) {
-      addObject(createFreehand(activeLayerId, compactPoints(freehandDraft)));
+      const end = toWorld(event);
+      addObject(
+        createFreehand(
+          activeLayerId,
+          [...freehandDraft, end],
+          activeLineStyle,
+        ),
+      );
       setFreehandDraft([]);
       return;
     }
@@ -281,6 +474,7 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
   return (
     <section
       aria-label="地图绘制区域"
+      aria-describedby="canvas-keyboard-help"
       className={`canvas-viewport tool-${tool}`}
       data-testid="map-canvas"
       onDoubleClick={() => {
@@ -291,7 +485,12 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
       onPointerUp={handlePointerUp}
       onWheel={handleWheel}
       ref={viewportRef}
+      tabIndex={0}
     >
+      <span className="visually-hidden" id="canvas-keyboard-help">
+        使用鼠标或手写笔绘制。按 V 选择、H 平移、M 图标、A 箭头、R 区域、T
+        文字、P 手绘，Esc 取消当前绘制。
+      </span>
       <div
         className="canvas-transform"
         style={{
@@ -315,51 +514,38 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
           width={project.width}
         >
           {arrowDraft ? (
-            <line
-              stroke="#e3318d"
-              strokeDasharray="9 6"
-              strokeWidth="4"
-              x1={arrowDraft.start.x}
-              x2={arrowDraft.end.x}
-              y1={arrowDraft.start.y}
-              y2={arrowDraft.end.y}
+            <DraftArrow
+              draft={arrowDraft}
+              lineStyle={activeLineStyle}
+              tint={activeAffiliation}
             />
           ) : null}
           {freehandDraft.length > 1 ? (
-            <polyline
+            <path
+              data-line-style={activeLineStyle}
               fill="none"
-              points={freehandDraft
-                .map((point) => `${point.x},${point.y}`)
-                .join(" ")}
-              stroke="#e3318d"
+              d={smoothPathData(freehandDraft)}
+              stroke="#315c70"
+              strokeDasharray={lineDashArray(activeLineStyle, 4)}
               strokeLinecap="round"
               strokeLinejoin="round"
               strokeWidth="4"
             />
           ) : null}
           {regionDraft.length > 0 ? (
-            <>
+            <g data-region-preview="true">
               <polyline
-                fill="rgba(227, 49, 141, 0.12)"
+                data-line-role="preview-boundary"
+                fill="none"
                 points={regionDraft
                   .map((point) => `${point.x},${point.y}`)
                   .join(" ")}
-                stroke="#e3318d"
-                strokeDasharray="8 5"
+                stroke={AFFILIATION_COLORS.objective}
+                strokeLinecap="butt"
+                strokeLinejoin="miter"
                 strokeWidth="2"
               />
-              {regionDraft.map((point, index) => (
-                <circle
-                  cx={point.x}
-                  cy={point.y}
-                  fill="#f2efe8"
-                  key={index}
-                  r="4"
-                  stroke="#e3318d"
-                  strokeWidth="2"
-                />
-              ))}
-            </>
+            </g>
           ) : null}
         </svg>
       </div>
@@ -392,6 +578,10 @@ function moveObjectPatch(
       return {
         start: { x: object.start.x + dx, y: object.start.y + dy },
         end: { x: object.end.x + dx, y: object.end.y + dy },
+        points: object.points.map((point) => ({
+          x: point.x + dx,
+          y: point.y + dy,
+        })),
       };
     case "region":
     case "freehand":

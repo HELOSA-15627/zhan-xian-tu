@@ -41,6 +41,7 @@ export function TopBar({
         <div>
           <strong>战线图志</strong>
           <span>{project.title}</span>
+          <small>LOCAL CAMPAIGN MAP</small>
         </div>
       </div>
       <div className="topbar-tools">

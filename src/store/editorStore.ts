@@ -4,25 +4,51 @@ import {
   createBlankProject,
   createLayer,
   duplicateObject,
+  normalizeStrokeWidth,
 } from "../model/project";
+import { normalizeFlagAttachment } from "../model/flags";
 import type { Viewport } from "../model/geometry";
 import type {
   AtlasProject,
   BackgroundSettings,
   EditorTool,
   Layer,
+  LineStyle,
+  MarkerArtworkId,
   SceneObject,
   SceneObjectPatch,
   TacticalSymbol,
+  UnitAffiliation,
+  UnitArtworkSource,
 } from "../model/types";
 
 const HISTORY_LIMIT = 50;
+const STROKE_DAMPING_KEY = "tactical-atlas:stroke-damping";
+
+function readStrokeDamping(): number {
+  if (typeof localStorage === "undefined") return 0.58;
+  try {
+    const saved = localStorage.getItem(STROKE_DAMPING_KEY);
+    if (saved === null) return 0.58;
+    const stored = Number(saved);
+    return Number.isFinite(stored)
+      ? Math.min(1, Math.max(0, stored))
+      : 0.58;
+  } catch {
+    return 0.58;
+  }
+}
 
 export type EditorState = {
   project: AtlasProject;
   selectedIds: string[];
   activeLayerId: string;
   activeSymbol: TacticalSymbol;
+  activeAffiliation: UnitAffiliation;
+  activeArtwork: MarkerArtworkId;
+  activeArtworkSource: UnitArtworkSource;
+  activeLineStyle: LineStyle;
+  strokeDamping: number;
   tool: EditorTool;
   viewport: Viewport;
   past: AtlasProject[];
@@ -32,6 +58,11 @@ export type EditorState = {
   setViewport: (viewport: Viewport) => void;
   setActiveLayer: (layerId: string) => void;
   setActiveSymbol: (symbol: TacticalSymbol) => void;
+  setActiveAffiliation: (affiliation: UnitAffiliation) => void;
+  setActiveArtwork: (artwork: MarkerArtworkId) => void;
+  setActiveArtworkSource: (source: UnitArtworkSource) => void;
+  setActiveLineStyle: (lineStyle: LineStyle) => void;
+  setStrokeDamping: (strength: number) => void;
   createNewProject: (title?: string) => void;
   loadProject: (project: AtlasProject) => void;
   updateProjectTitle: (title: string) => void;
@@ -39,6 +70,7 @@ export type EditorState = {
   applyBackground: (dataUrl: string, width: number, height: number) => void;
   addObject: (object: SceneObject) => void;
   updateObject: (id: string, patch: SceneObjectPatch) => void;
+  removeObject: (id: string) => void;
   removeSelected: () => void;
   duplicateSelected: () => void;
   addLayer: (name?: string) => void;
@@ -96,6 +128,11 @@ export const useEditorStore = create<EditorState>((set, get) => {
     selectedIds: [],
     activeLayerId: initialProject.layers[0].id,
     activeSymbol: "friendly",
+    activeAffiliation: "friendly",
+    activeArtwork: "friendly-tank",
+    activeArtworkSource: "psd",
+    activeLineStyle: "solid",
+    strokeDamping: readStrokeDamping(),
     tool: "select",
     viewport: { x: 0, y: 0, scale: 1 },
     past: [],
@@ -106,6 +143,22 @@ export const useEditorStore = create<EditorState>((set, get) => {
     setViewport: (viewport) => set({ viewport }),
     setActiveLayer: (activeLayerId) => set({ activeLayerId }),
     setActiveSymbol: (activeSymbol) => set({ activeSymbol }),
+    setActiveAffiliation: (activeAffiliation) => set({ activeAffiliation }),
+    setActiveArtwork: (activeArtwork) => set({ activeArtwork }),
+    setActiveArtworkSource: (activeArtworkSource) =>
+      set({ activeArtworkSource }),
+    setActiveLineStyle: (activeLineStyle) => set({ activeLineStyle }),
+    setStrokeDamping: (strength) => {
+      const strokeDamping = Math.min(1, Math.max(0, strength));
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem(STROKE_DAMPING_KEY, String(strokeDamping));
+        }
+      } catch {
+        // Editing remains usable when browser storage is unavailable.
+      }
+      set({ strokeDamping });
+    },
 
     createNewProject: (title) => {
       const project = createBlankProject(title);
@@ -114,6 +167,10 @@ export const useEditorStore = create<EditorState>((set, get) => {
         selectedIds: [],
         activeLayerId: project.layers[0].id,
         activeSymbol: "friendly",
+        activeAffiliation: "friendly",
+        activeArtwork: "friendly-tank",
+        activeArtworkSource: "psd",
+        activeLineStyle: "solid",
         tool: "select",
         viewport: { x: 0, y: 0, scale: 1 },
         past: [],
@@ -170,11 +227,69 @@ export const useEditorStore = create<EditorState>((set, get) => {
       const next = cloneProject(get().project);
       const index = next.objects.findIndex((object) => object.id === id);
       if (index === -1) return;
-      next.objects[index] = {
+      const normalizedPatch = { ...patch };
+      if (normalizedPatch.width !== undefined) {
+        normalizedPatch.width = normalizeStrokeWidth(normalizedPatch.width, 0);
+      }
+      if (normalizedPatch.startWidth !== undefined) {
+        normalizedPatch.startWidth = normalizeStrokeWidth(
+          normalizedPatch.startWidth,
+          0,
+        );
+      }
+      if (normalizedPatch.endWidth !== undefined) {
+        normalizedPatch.endWidth = normalizeStrokeWidth(
+          normalizedPatch.endWidth,
+          0,
+        );
+      }
+      if (normalizedPatch.strokeWidth !== undefined) {
+        normalizedPatch.strokeWidth = normalizeStrokeWidth(
+          normalizedPatch.strokeWidth,
+          0,
+        );
+      }
+      if (normalizedPatch.headSize !== undefined) {
+        normalizedPatch.headSize = Math.min(
+          160,
+          Math.max(12, normalizedPatch.headSize),
+        );
+      }
+      if (normalizedPatch.lineDashCount !== undefined) {
+        normalizedPatch.lineDashCount = Math.min(
+          80,
+          Math.max(4, Math.round(normalizedPatch.lineDashCount)),
+        );
+      }
+      const updatedObject = {
         ...next.objects[index],
-        ...structuredClone(patch),
+        ...structuredClone(normalizedPatch),
       } as SceneObject;
+      if (
+        updatedObject.type === "marker" &&
+        "flagAttachment" in normalizedPatch
+      ) {
+        const attachment = normalizeFlagAttachment(
+          normalizedPatch.flagAttachment,
+        );
+        if (attachment) {
+          updatedObject.flagAttachment = attachment;
+        } else {
+          delete updatedObject.flagAttachment;
+        }
+      }
+      next.objects[index] = updatedObject;
       commitProject(next);
+    },
+
+    removeObject: (id) => {
+      const state = get();
+      if (!state.project.objects.some((object) => object.id === id)) return;
+      const next = cloneProject(state.project);
+      next.objects = next.objects.filter((object) => object.id !== id);
+      commitProject(next, {
+        selectedIds: state.selectedIds.filter((selected) => selected !== id),
+      });
     },
 
     removeSelected: () => {

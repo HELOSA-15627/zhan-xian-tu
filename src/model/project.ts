@@ -3,16 +3,33 @@ import type {
   AtlasProject,
   FreehandObject,
   Layer,
+  LineStyle,
+  MarkerArtworkId,
   MarkerObject,
   Point,
   RegionObject,
   SceneObject,
   TacticalSymbol,
   TextObject,
+  UnitAffiliation,
+  UnitArtworkSource,
 } from "./types";
+import {
+  AFFILIATION_COLORS,
+  affiliationForSymbol,
+  artworkSourceFor,
+  defaultArtworkForSymbol,
+} from "./unitAssets";
 
 const DEFAULT_WIDTH = 1600;
 const DEFAULT_HEIGHT = 900;
+export const DEFAULT_MARKER_SIZE = 88;
+export const MAX_STROKE_WIDTH = 64;
+
+function clampWidth(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(MAX_STROKE_WIDTH, Math.max(0, value));
+}
 
 export function createId(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`;
@@ -54,7 +71,18 @@ export function createMarker(
   layerId: string,
   point: Point,
   symbol: TacticalSymbol = "friendly",
+  options: {
+    affiliation?: UnitAffiliation;
+    artwork?: MarkerArtworkId;
+    artworkSource?: UnitArtworkSource;
+    color?: string;
+  } = {},
 ): MarkerObject {
+  const affiliation = options.affiliation ?? affiliationForSymbol(symbol);
+  const artwork =
+    options.artwork ?? defaultArtworkForSymbol(symbol, affiliation);
+  const artworkSource =
+    options.artworkSource ?? artworkSourceFor(artwork);
   return {
     id: createId("marker"),
     layerId,
@@ -62,11 +90,14 @@ export function createMarker(
     name: "战役图标",
     x: point.x,
     y: point.y,
-    size: 44,
+    size: DEFAULT_MARKER_SIZE,
     rotation: 0,
     opacity: 1,
-    color: "#b9e253",
+    color: options.color ?? AFFILIATION_COLORS[affiliation],
     symbol,
+    affiliation,
+    artwork,
+    artworkSource,
     label: "",
   };
 }
@@ -75,6 +106,9 @@ export function createArrow(
   layerId: string,
   start: Point,
   end: Point,
+  lineStyle: LineStyle = "solid",
+  tint: UnitAffiliation = "objective",
+  points: Point[] = [start, end],
 ): ArrowObject {
   return {
     id: createId("arrow"),
@@ -83,9 +117,16 @@ export function createArrow(
     name: "推进箭头",
     start,
     end,
-    color: "#e85a4f",
-    width: 8,
-    opacity: 0.9,
+    points: points.map((point) => ({ ...point })),
+    color: AFFILIATION_COLORS[tint],
+    width: 10,
+    startWidth: 10,
+    endWidth: 10,
+    headSize: 34,
+    headStyle: "psd",
+    opacity: 0.94,
+    lineStyle,
+    tint,
     dashed: false,
     animation: {
       enabled: true,
@@ -97,6 +138,18 @@ export function createArrow(
   };
 }
 
+export function createArrowPath(
+  layerId: string,
+  points: Point[],
+  lineStyle: LineStyle = "solid",
+  tint: UnitAffiliation = "objective",
+): ArrowObject {
+  const safePoints = points.map((point) => ({ ...point }));
+  const start = safePoints[0] ?? { x: 0, y: 0 };
+  const end = safePoints.at(-1) ?? start;
+  return createArrow(layerId, start, end, lineStyle, tint, safePoints);
+}
+
 export function createRegion(layerId: string, points: Point[]): RegionObject {
   return {
     id: createId("region"),
@@ -104,8 +157,13 @@ export function createRegion(layerId: string, points: Point[]): RegionObject {
     type: "region",
     name: "行动区域",
     points: points.map((point) => ({ ...point })),
+    closed: true,
+    geometryLocked: false,
+    shapePreset: "custom",
+    lineStyle: "solid",
+    lineDashCount: 24,
     fill: "#e3318d",
-    stroke: "#f2efe8",
+    stroke: "#e3318d",
     strokeWidth: 2,
     opacity: 0.22,
     label: "",
@@ -135,6 +193,7 @@ export function createText(
 export function createFreehand(
   layerId: string,
   points: Point[],
+  lineStyle: LineStyle = "solid",
 ): FreehandObject {
   return {
     id: createId("freehand"),
@@ -142,11 +201,18 @@ export function createFreehand(
     type: "freehand",
     name: "手绘线",
     points: points.map((point) => ({ ...point })),
-    color: "#1f2430",
-    strokeWidth: 3,
+    color: "#315c70",
+    strokeWidth: 4,
+    startWidth: 4,
+    endWidth: 4,
     opacity: 1,
+    lineStyle,
     label: "",
   };
+}
+
+export function normalizeStrokeWidth(value: unknown, fallback: number): number {
+  return clampWidth(typeof value === "number" ? value : fallback);
 }
 
 function offsetPoint(point: Point): Point {
@@ -167,6 +233,7 @@ export function duplicateObject(object: SceneObject): SceneObject {
     case "arrow":
       copy.start = offsetPoint(copy.start);
       copy.end = offsetPoint(copy.end);
+      copy.points = copy.points.map(offsetPoint);
       break;
     case "region":
       copy.points = copy.points.map(offsetPoint);
