@@ -60,11 +60,19 @@ describe("project repository", () => {
     const legacyObjects = legacy.objects as Array<Record<string, unknown>>;
     delete legacyObjects[1].lineStyle;
     delete legacyObjects[1].pathMode;
+    delete legacyObjects[0].scaleX;
+    delete legacyObjects[0].scaleY;
 
     const parsed = parseProjectFile(JSON.stringify(legacy));
 
     expect(parsed.objects).toHaveLength(2);
-    expect(parsed.objects[0]).toMatchObject({ type: "marker", x: 10, y: 20 });
+    expect(parsed.objects[0]).toMatchObject({
+      type: "marker",
+      x: 10,
+      y: 20,
+      scaleX: 1,
+      scaleY: 1,
+    });
     expect(parsed.objects[1]).toMatchObject({
       type: "arrow",
       lineStyle: "solid",

@@ -20,6 +20,11 @@ import {
   sampleSmoothPath,
 } from "../model/strokeGeometry";
 import { buildRegionDashArray } from "../model/regionGeometry";
+import {
+  selectionBounds,
+  selectionHandlePoints,
+  type SelectionHandle,
+} from "../model/selectionGeometry";
 import type {
   ArrowObject,
   ArrowHeadStyle,
@@ -40,6 +45,11 @@ type SceneSvgProps = {
   onObjectPointerDown?: (
     event: ReactPointerEvent<SVGGElement>,
     objectId: string,
+  ) => void;
+  onResizePointerDown?: (
+    event: ReactPointerEvent<SVGRectElement>,
+    objectId: string,
+    handle: SelectionHandle,
   ) => void;
 };
 
@@ -127,46 +137,6 @@ function arrowHeadConnectionLength(
   return size;
 }
 
-function objectPoints(object: SceneObject): Point[] {
-  switch (object.type) {
-    case "marker":
-      return [
-        { x: object.x - object.size / 2, y: object.y - object.size / 2 },
-        { x: object.x + object.size / 2, y: object.y + object.size / 2 },
-      ];
-    case "arrow":
-      return arrowPoints(object);
-    case "region":
-    case "freehand":
-      return object.points;
-    case "text":
-      return [
-        { x: object.x, y: object.y - object.fontSize },
-        {
-          x: object.x + Math.max(80, object.text.length * object.fontSize * 0.8),
-          y: object.y + object.fontSize * 0.4,
-        },
-      ];
-  }
-}
-
-function selectionBounds(object: SceneObject) {
-  const points = objectPoints(object);
-  const xs = points.map((point) => point.x);
-  const ys = points.map((point) => point.y);
-  const minX = Math.min(...xs);
-  const minY = Math.min(...ys);
-  const maxX = Math.max(...xs);
-  const maxY = Math.max(...ys);
-
-  return {
-    x: minX - 8,
-    y: minY - 8,
-    width: Math.max(24, maxX - minX + 16),
-    height: Math.max(24, maxY - minY + 16),
-  };
-}
-
 function Label({
   text,
   x,
@@ -211,14 +181,20 @@ function ObjectNode({
   const arrowHeadClipId = `arrow-head-clip-${arrowHeadId}`;
 
   switch (object.type) {
-    case "marker":
+    case "marker": {
+      const scaleX = object.scaleX ?? 1;
+      const scaleY = object.scaleY ?? 1;
+      const scaleTransform =
+        scaleX === 1 && scaleY === 1
+          ? ""
+          : ` scale(${scaleX} ${scaleY})`;
       return (
         <g
           data-marker-style="atlas"
           data-object-id={object.id}
           data-object-type="marker"
           opacity={object.opacity}
-          transform={`translate(${object.x} ${object.y}) rotate(${object.rotation})`}
+          transform={`translate(${object.x} ${object.y}) rotate(${object.rotation})${scaleTransform}`}
         >
           <g transform={`translate(${-object.size / 2} ${-object.size / 2})`}>
             <TacticalSymbol
@@ -243,6 +219,7 @@ function ObjectNode({
           />
         </g>
       );
+    }
     case "arrow": {
       const points = arrowPoints(object);
       const style = normalizeLineStyle(object.lineStyle);
@@ -540,13 +517,19 @@ function ObjectNode({
           ) : null}
         </g>
       );
-    case "text":
+    case "text": {
+      const scaleX = object.scaleX ?? 1;
+      const scaleY = object.scaleY ?? 1;
+      const scaleTransform =
+        scaleX === 1 && scaleY === 1
+          ? ""
+          : ` scale(${scaleX} ${scaleY})`;
       return (
         <g
           data-object-id={object.id}
           data-object-type="text"
           opacity={object.opacity}
-          transform={`translate(${object.x} ${object.y}) rotate(${object.rotation})`}
+          transform={`translate(${object.x} ${object.y}) rotate(${object.rotation})${scaleTransform}`}
         >
           {object.text.split("\n").map((line, index) => (
             <text
@@ -566,6 +549,7 @@ function ObjectNode({
           ))}
         </g>
       );
+    }
     case "freehand":
       {
         const style = normalizeLineStyle(object.lineStyle);
@@ -711,6 +695,7 @@ export function SceneSvg({
   time,
   interactive,
   onObjectPointerDown,
+  onResizePointerDown,
 }: SceneSvgProps) {
   const selected = new Set(selectedIds);
   const layerById = new Map<string, Layer>(
@@ -770,7 +755,6 @@ export function SceneSvg({
                     <g
                       className="selection-chrome"
                       data-selection="true"
-                      pointerEvents="none"
                     >
                       {(() => {
                         const bounds = selectionBounds(object);
@@ -783,31 +767,54 @@ export function SceneSvg({
                               stroke="#e3318d"
                               strokeDasharray="5 4"
                               strokeWidth="1.5"
+                              pointerEvents="none"
                               width={bounds.width}
                               x={bounds.x}
                               y={bounds.y}
                             />
-                            {[
-                              [bounds.x, bounds.y],
-                              [bounds.x + bounds.width, bounds.y],
-                              [bounds.x, bounds.y + bounds.height],
-                              [
-                                bounds.x + bounds.width,
-                                bounds.y + bounds.height,
-                              ],
-                            ].map(([x, y], index) => (
-                              <rect
-                                className="selection-handle"
-                                fill="#f2efe8"
-                                height="7"
-                                key={index}
-                                stroke="#e3318d"
-                                strokeWidth="1.5"
-                                width="7"
-                                x={x - 3.5}
-                                y={y - 3.5}
-                              />
-                            ))}
+                            {selectionHandlePoints(bounds).map(
+                              ({ handle, x, y }) => (
+                                <rect
+                                  className="selection-handle"
+                                  data-resize-handle={handle}
+                                  fill="#f2efe8"
+                                  height="7"
+                                  key={handle}
+                                  onPointerDown={(event) => {
+                                    if (
+                                      !interactive ||
+                                      layer.locked ||
+                                      !onResizePointerDown
+                                    ) {
+                                      return;
+                                    }
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    onResizePointerDown(
+                                      event,
+                                      object.id,
+                                      handle,
+                                    );
+                                  }}
+                                  pointerEvents={
+                                    interactive && !layer.locked
+                                      ? "all"
+                                      : "none"
+                                  }
+                                  stroke="#e3318d"
+                                  strokeWidth="1.5"
+                                  style={{
+                                    cursor:
+                                      handle === "nw" || handle === "se"
+                                        ? "nwse-resize"
+                                        : "nesw-resize",
+                                  }}
+                                  width="7"
+                                  x={x - 3.5}
+                                  y={y - 3.5}
+                                />
+                              ),
+                            )}
                           </>
                         );
                       })()}

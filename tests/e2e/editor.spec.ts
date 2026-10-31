@@ -488,6 +488,48 @@ test("searches badges and flags by Chinese or English name", async ({ page }) =>
   ).toBeVisible();
 });
 
+test("previews object movement and corner resizing while dragging", async ({
+  page,
+}) => {
+  await page.getByRole("button", { name: "PSD 兵牌 装甲" }).click();
+  const canvas = page.getByTestId("map-canvas");
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("Map canvas has no layout box");
+  const start = {
+    x: box.x + box.width * 0.38,
+    y: box.y + box.height * 0.42,
+  };
+  await page.mouse.click(start.x, start.y);
+
+  await page.getByRole("button", { name: "选择", exact: true }).click();
+  const marker = page.locator('[data-object-type="marker"]');
+  const transformBeforeDrag = await marker.getAttribute("transform");
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(start.x + 46, start.y + 28, { steps: 6 });
+  await expect(marker).not.toHaveAttribute(
+    "transform",
+    transformBeforeDrag ?? "",
+  );
+  await page.mouse.up();
+
+  const handle = page.locator('[data-resize-handle="se"]');
+  const handleBox = await handle.boundingBox();
+  if (!handleBox) throw new Error("Resize handle has no screen bounds");
+  await page.mouse.move(
+    handleBox.x + handleBox.width / 2,
+    handleBox.y + handleBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    handleBox.x + handleBox.width / 2 + 52,
+    handleBox.y + handleBox.height / 2 + 32,
+    { steps: 6 },
+  );
+  await expect(marker).toHaveAttribute("transform", /scale\(/);
+  await page.mouse.up();
+});
+
 test("drags a locked region and adds a node after unlocking", async ({
   page,
 }) => {

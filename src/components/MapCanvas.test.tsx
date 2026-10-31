@@ -336,6 +336,14 @@ describe("map canvas", () => {
       clientY: 150,
       pointerId: 1,
     });
+    expect(useEditorStore.getState().project.objects[0]).toMatchObject({
+      type: "marker",
+      x: 100,
+      y: 100,
+    });
+    expect(
+      container.querySelector(`[data-object-id="${marker.id}"]`),
+    ).toHaveAttribute("transform", "translate(170 150) rotate(0)");
     fireEvent.pointerUp(canvas, {
       clientX: 170,
       clientY: 150,
@@ -392,6 +400,71 @@ describe("map canvas", () => {
         { x: 140, y: 160 },
       ],
     });
+  });
+
+  it("resizes a selected region independently on both axes from a corner handle", () => {
+    const store = useEditorStore.getState();
+    const region = createRegion(store.project.layers[0].id, [
+      { x: 100, y: 100 },
+      { x: 200, y: 100 },
+      { x: 200, y: 200 },
+      { x: 100, y: 200 },
+    ]);
+    store.addObject(region);
+    const historyBefore = useEditorStore.getState().past.length;
+    const { container } = render(<MapCanvas />);
+    const canvas = screen.getByTestId("map-canvas");
+    const handle = container.querySelector(
+      '[data-resize-handle="se"]',
+    );
+    if (!handle) throw new Error("Southeast resize handle was not rendered");
+
+    fireEvent.pointerDown(handle, {
+      button: 0,
+      clientX: 208,
+      clientY: 208,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(canvas, {
+      clientX: 258,
+      clientY: 238,
+      pointerId: 1,
+    });
+
+    const boundary = container.querySelector(
+      '[data-object-type="region"] [data-line-role="boundary"]',
+    );
+    expect(boundary).toHaveAttribute(
+      "points",
+      "100,100 250,100 250,230 100,230",
+    );
+    expect(useEditorStore.getState().project.objects[0]).toMatchObject({
+      type: "region",
+      points: [
+        { x: 100, y: 100 },
+        { x: 200, y: 100 },
+        { x: 200, y: 200 },
+        { x: 100, y: 200 },
+      ],
+    });
+    expect(useEditorStore.getState().past).toHaveLength(historyBefore);
+
+    fireEvent.pointerUp(canvas, {
+      clientX: 258,
+      clientY: 238,
+      pointerId: 1,
+    });
+
+    expect(useEditorStore.getState().project.objects[0]).toMatchObject({
+      type: "region",
+      points: [
+        { x: 100, y: 100 },
+        { x: 250, y: 100 },
+        { x: 250, y: 230 },
+        { x: 100, y: 230 },
+      ],
+    });
+    expect(useEditorStore.getState().past).toHaveLength(historyBefore + 1);
   });
 
   it("inserts a node into a selected unlocked region with the region tool", () => {

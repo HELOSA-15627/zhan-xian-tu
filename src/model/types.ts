@@ -122,6 +122,8 @@ export type MarkerObject = BaseObject & {
   x: number;
   y: number;
   size: number;
+  scaleX: number;
+  scaleY: number;
   rotation: number;
   opacity: number;
   color: string;
@@ -171,6 +173,8 @@ export type TextObject = BaseObject & {
   type: "text";
   x: number;
   y: number;
+  scaleX: number;
+  scaleY: number;
   text: string;
   color: string;
   fontSize: number;
@@ -202,6 +206,8 @@ export type SceneObjectPatch = {
   x?: number;
   y?: number;
   size?: number;
+  scaleX?: number;
+  scaleY?: number;
   rotation?: number;
   opacity?: number;
   color?: string;

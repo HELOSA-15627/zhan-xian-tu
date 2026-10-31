@@ -81,6 +81,13 @@ function isLayer(value: unknown): value is Layer {
   );
 }
 
+function normalizeScale(value: unknown): number {
+  return Math.min(
+    20,
+    Math.max(0.05, typeof value === "number" ? value : 1),
+  );
+}
+
 function isSceneObject(value: unknown): value is SceneObject {
   if (
     !isRecord(value) ||
@@ -196,6 +203,8 @@ function validateProject(value: unknown): AtlasProject {
           1,
           Math.max(0, typeof next.opacity === "number" ? next.opacity : 1),
         );
+        next.scaleX = normalizeScale(next.scaleX);
+        next.scaleY = normalizeScale(next.scaleY);
         next.flagAttachment = normalizeFlagAttachment(next.flagAttachment);
         return next;
       }
@@ -222,6 +231,13 @@ function validateProject(value: unknown): AtlasProject {
           ),
         );
         next.fill = next.stroke;
+        return next;
+      }
+
+      if (object.type === "text") {
+        const next = structuredClone(object);
+        next.scaleX = normalizeScale(next.scaleX);
+        next.scaleY = normalizeScale(next.scaleY);
         return next;
       }
 

@@ -38,6 +38,11 @@ import {
   regionContainsPoint,
 } from "../model/regionGeometry";
 import {
+  objectGeometryPatch,
+  resizeObjectFromDelta,
+  type SelectionHandle,
+} from "../model/selectionGeometry";
+import {
   buildOpenOffsetPath,
   buildTaperedRibbon,
 } from "../model/strokeGeometry";
@@ -65,8 +70,16 @@ type FreehandDraft = Point[];
 
 type ObjectDrag = {
   objectId: string;
+  object: SceneObject;
   start: Point;
   last: Point;
+};
+
+type ObjectResize = {
+  objectId: string;
+  object: SceneObject;
+  handle: SelectionHandle;
+  start: Point;
 };
 
 type ClickPlacement = {
@@ -215,6 +228,7 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
     viewportY: number;
   } | null>(null);
   const objectDragRef = useRef<ObjectDrag | null>(null);
+  const objectResizeRef = useRef<ObjectResize | null>(null);
   const clickPlacementRef = useRef<ClickPlacement | null>(null);
   const foldClickPlacementRef = useRef<FoldClickPlacement | null>(null);
   const foldArrowRef = useRef<Point[]>([]);
@@ -227,6 +241,9 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
     null,
   );
   const [foldCursor, setFoldCursor] = useState<Point | null>(null);
+  const [objectPreview, setObjectPreview] = useState<SceneObject | null>(
+    null,
+  );
 
   const project = useEditorStore((state) => state.project);
   const viewport = useEditorStore((state) => state.viewport);
@@ -290,6 +307,9 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
         foldRegionRef.current = [];
         setDirectRegionDraft(null);
         setFoldCursor(null);
+        setObjectPreview(null);
+        objectDragRef.current = null;
+        objectResizeRef.current = null;
         foldClickPlacementRef.current = null;
         setTool("select");
       }
@@ -312,13 +332,38 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
     event.stopPropagation();
     setSelection([objectId]);
     if (tool === "select") {
+      const object = project.objects.find((item) => item.id === objectId);
+      if (!object) return;
+      setObjectPreview(null);
       const point = toWorld(event);
       objectDragRef.current = {
         objectId,
+        object,
         start: point,
         last: point,
       };
+      viewportRef.current?.setPointerCapture?.(event.pointerId);
     }
+  };
+
+  const beginObjectResize = (
+    event: ReactPointerEvent<SVGRectElement>,
+    objectId: string,
+    handle: SelectionHandle,
+  ) => {
+    const object = project.objects.find((item) => item.id === objectId);
+    const layer = project.layers.find((item) => item.id === object?.layerId);
+    if (!object || !layer?.visible || layer.locked) return;
+
+    objectDragRef.current = null;
+    objectResizeRef.current = {
+      objectId,
+      object,
+      handle,
+      start: toWorld(event),
+    };
+    setObjectPreview(object);
+    viewportRef.current?.setPointerCapture?.(event.pointerId);
   };
 
   const finishRegion = () => {
@@ -528,8 +573,31 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
       setFoldCursor(toWorld(event));
     }
 
+    if (objectResizeRef.current) {
+      const resize = objectResizeRef.current;
+      const point = toWorld(event);
+      setObjectPreview(
+        resizeObjectFromDelta(
+          resize.object,
+          resize.handle,
+          point.x - resize.start.x,
+          point.y - resize.start.y,
+        ),
+      );
+      return;
+    }
+
     if (objectDragRef.current) {
-      objectDragRef.current.last = toWorld(event);
+      const drag = objectDragRef.current;
+      const point = toWorld(event);
+      drag.last = point;
+      setObjectPreview(
+        moveObject(
+          drag.object,
+          point.x - drag.start.x,
+          point.y - drag.start.y,
+        ),
+      );
     }
 
   };
@@ -640,16 +708,39 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
       return;
     }
 
+    if (objectResizeRef.current) {
+      const resize = objectResizeRef.current;
+      const end = toWorld(event);
+      const dx = end.x - resize.start.x;
+      const dy = end.y - resize.start.y;
+      if (Math.hypot(dx, dy) > 0.5) {
+        updateObject(
+          resize.objectId,
+          objectGeometryPatch(
+            resizeObjectFromDelta(
+              resize.object,
+              resize.handle,
+              dx,
+              dy,
+            ),
+          ),
+        );
+      }
+      objectResizeRef.current = null;
+      setObjectPreview(null);
+      return;
+    }
+
     if (objectDragRef.current) {
       const drag = objectDragRef.current;
-      const object = project.objects.find((item) => item.id === drag.objectId);
-      const dx = drag.last.x - drag.start.x;
-      const dy = drag.last.y - drag.start.y;
-      if (object && Math.hypot(dx, dy) > 1) {
-        const patch = moveObjectPatch(object, dx, dy);
-        updateObject(object.id, patch);
+      const end = toWorld(event);
+      const dx = end.x - drag.start.x;
+      const dy = end.y - drag.start.y;
+      if (Math.hypot(dx, dy) > 1) {
+        updateObject(drag.objectId, moveObjectPatch(drag.object, dx, dy));
       }
       objectDragRef.current = null;
+      setObjectPreview(null);
     }
   };
 
@@ -670,6 +761,14 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
       : regionDraft;
   const regionPreview = directRegionDraft ?? foldRegionPreview;
   const arrowPreview = arrowDraft ?? foldArrowPreview;
+  const displayedProject = objectPreview
+    ? {
+        ...project,
+        objects: project.objects.map((object) =>
+          object.id === objectPreview.id ? objectPreview : object,
+        ),
+      }
+    : project;
 
   return (
     <section
@@ -686,6 +785,11 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
         }
       }}
       onPointerDown={handlePointerDown}
+      onPointerCancel={() => {
+        objectDragRef.current = null;
+        objectResizeRef.current = null;
+        setObjectPreview(null);
+      }}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onWheel={handleWheel}
@@ -707,7 +811,8 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
         <SceneSvg
           interactive={tool === "select"}
           onObjectPointerDown={selectObject}
-          project={project}
+          onResizePointerDown={beginObjectResize}
+          project={displayedProject}
           selectedIds={selectedIds}
           time={animationTime}
         />
@@ -806,4 +911,15 @@ function moveObjectPatch(
         })),
       };
   }
+}
+
+function moveObject(
+  object: SceneObject,
+  dx: number,
+  dy: number,
+): SceneObject {
+  return {
+    ...structuredClone(object),
+    ...moveObjectPatch(object, dx, dy),
+  } as SceneObject;
 }
