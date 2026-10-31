@@ -773,6 +773,18 @@ function textFields(
           value={object.fontSize}
         />
       </Field>
+      <label className="check-field">
+        <input
+          aria-label="启用批注描边"
+          checked={object.strokeEnabled}
+          name="text-stroke-enabled"
+          onChange={(event) =>
+            update({ strokeEnabled: event.target.checked })
+          }
+          type="checkbox"
+        />
+        启用批注描边
+      </label>
       <Field label="旋转角度">
         <NumberInput
           label="文字旋转角度"

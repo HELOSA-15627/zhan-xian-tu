@@ -530,6 +530,23 @@ test("previews object movement and corner resizing while dragging", async ({
   await page.mouse.up();
 });
 
+test("toggles the outline on a text annotation", async ({ page }) => {
+  await page.getByRole("button", { name: "文字", exact: true }).click();
+  const canvas = page.getByTestId("map-canvas");
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("Map canvas has no layout box");
+  await page.mouse.click(
+    box.x + box.width * 0.42,
+    box.y + box.height * 0.44,
+  );
+
+  const text = page.locator('[data-object-type="text"] text').first();
+  await expect(text).toHaveAttribute("stroke", "#d8ccb4");
+  await page.getByLabel("启用批注描边").uncheck();
+  await expect(text).toHaveAttribute("stroke", "none");
+  await expect(text).toHaveAttribute("stroke-width", "0");
+});
+
 test("drags a locked region and adds a node after unlocking", async ({
   page,
 }) => {

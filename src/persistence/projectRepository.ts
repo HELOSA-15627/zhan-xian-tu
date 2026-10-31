@@ -238,6 +238,7 @@ function validateProject(value: unknown): AtlasProject {
         const next = structuredClone(object);
         next.scaleX = normalizeScale(next.scaleX);
         next.scaleY = normalizeScale(next.scaleY);
+        next.strokeEnabled = next.strokeEnabled !== false;
         return next;
       }
 

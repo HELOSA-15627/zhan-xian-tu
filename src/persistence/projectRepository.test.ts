@@ -8,6 +8,7 @@ import {
   createFreehand,
   createMarker,
   createRegion,
+  createText,
 } from "../model/project";
 import {
   clearProject,
@@ -42,6 +43,28 @@ describe("project repository", () => {
     const text = serializeProject(project);
 
     expect(parseProjectFile(text)).toEqual(project);
+  });
+
+  it("preserves disabled annotation outlines and upgrades older text", () => {
+    const project = createBlankProject("批注描边");
+    const text = createText(project.layers[0].id, { x: 20, y: 40 }, "岸防");
+    text.strokeEnabled = false;
+    project.objects.push(text);
+
+    const parsed = parseProjectFile(serializeProject(project));
+    expect(parsed.objects[0]).toMatchObject({
+      type: "text",
+      strokeEnabled: false,
+    });
+
+    const legacy = JSON.parse(serializeProject(project)) as {
+      objects: Array<Record<string, unknown>>;
+    };
+    delete legacy.objects[0].strokeEnabled;
+    expect(parseProjectFile(JSON.stringify(legacy)).objects[0]).toMatchObject({
+      type: "text",
+      strokeEnabled: true,
+    });
   });
 
   it("upgrades pre-line-style projects without losing objects", () => {

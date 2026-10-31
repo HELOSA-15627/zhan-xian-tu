@@ -178,6 +178,7 @@ export type TextObject = BaseObject & {
   text: string;
   color: string;
   fontSize: number;
+  strokeEnabled: boolean;
   rotation: number;
   opacity: number;
 };
@@ -239,6 +240,7 @@ export type SceneObjectPatch = {
   strokeWidth?: number;
   text?: string;
   fontSize?: number;
+  strokeEnabled?: boolean;
 };
 
 export type BackgroundSettings = {

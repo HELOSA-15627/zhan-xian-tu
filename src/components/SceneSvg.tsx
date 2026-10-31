@@ -520,6 +520,7 @@ function ObjectNode({
     case "text": {
       const scaleX = object.scaleX ?? 1;
       const scaleY = object.scaleY ?? 1;
+      const strokeEnabled = object.strokeEnabled !== false;
       const scaleTransform =
         scaleX === 1 && scaleY === 1
           ? ""
@@ -538,9 +539,9 @@ function ObjectNode({
               fontSize={object.fontSize}
               fontWeight="600"
               key={`${line}-${index}`}
-              paintOrder="stroke"
-              stroke="#d8ccb4"
-              strokeWidth="3"
+              paintOrder={strokeEnabled ? "stroke" : undefined}
+              stroke={strokeEnabled ? "#d8ccb4" : "none"}
+              strokeWidth={strokeEnabled ? "3" : "0"}
               x="0"
               y={index * object.fontSize * 1.3}
             >

@@ -50,6 +50,31 @@ describe("scene svg", () => {
     expect(screen.queryByText("不可见")).not.toBeInTheDocument();
   });
 
+  it("removes the text annotation outline when disabled", () => {
+    const project = createBlankProject();
+    const text = createText(
+      project.layers[0].id,
+      { x: 20, y: 30 },
+      "无描边批注",
+    );
+    text.strokeEnabled = false;
+    project.objects = [text];
+
+    render(
+      <SceneSvg
+        project={project}
+        selectedIds={[]}
+        time={null}
+        interactive={false}
+      />,
+    );
+    const node = screen.getByText("无描边批注");
+
+    expect(node).toHaveAttribute("stroke", "none");
+    expect(node).toHaveAttribute("stroke-width", "0");
+    expect(node).not.toHaveAttribute("paint-order");
+  });
+
   it("never renders selection chrome in export mode", () => {
     const project = createBlankProject();
     const text = createText(project.layers[0].id, { x: 20, y: 30 }, "选中文字");

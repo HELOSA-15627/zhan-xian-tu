@@ -206,6 +206,7 @@ export function createText(
     text,
     color: "#1f2430",
     fontSize: 20,
+    strokeEnabled: true,
     rotation: 0,
     opacity: 1,
   };

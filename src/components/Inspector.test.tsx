@@ -7,6 +7,7 @@ import {
   createFreehand,
   createMarker,
   createRegion,
+  createText,
 } from "../model/project";
 import { useEditorStore } from "../store/editorStore";
 import { Inspector } from "./Inspector";
@@ -140,6 +141,27 @@ describe("inspector", () => {
     await userEvent.click(screen.getByRole("button", { name: "删除所选" }));
 
     expect(useEditorStore.getState().project.objects).toHaveLength(0);
+  });
+
+  it("toggles the selected text annotation outline", async () => {
+    const store = useEditorStore.getState();
+    const text = createText(
+      store.project.layers[0].id,
+      { x: 40, y: 60 },
+      "海岸防线",
+    );
+    store.addObject(text);
+    store.setSelection([text.id]);
+    render(<Inspector />);
+
+    const toggle = screen.getByLabelText("启用批注描边");
+    expect(toggle).toBeChecked();
+    await userEvent.click(toggle);
+
+    expect(useEditorStore.getState().project.objects[0]).toMatchObject({
+      type: "text",
+      strokeEnabled: false,
+    });
   });
 
   it("updates the selected arrow line style", async () => {
