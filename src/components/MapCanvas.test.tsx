@@ -84,6 +84,7 @@ describe("map canvas", () => {
       type: "arrow",
       start: { x: 100, y: 100 },
       end: { x: 260, y: 180 },
+      pathMode: "smooth",
     });
     const arrow = useEditorStore.getState().project.objects[0];
     expect(arrow?.type === "arrow" ? arrow.points.length : 0).toBeGreaterThan(2);
@@ -96,11 +97,12 @@ describe("map canvas", () => {
     render(<MapCanvas />);
     const canvas = screen.getByTestId("map-canvas");
 
-    for (const point of [
+    const points = [
       { x: 60, y: 60 },
       { x: 160, y: 60 },
       { x: 220, y: 120 },
-    ]) {
+    ];
+    for (const point of points.slice(0, 2)) {
       fireEvent.pointerDown(canvas, {
         button: 0,
         clientX: point.x,
@@ -114,6 +116,23 @@ describe("map canvas", () => {
         pointerId: 1,
       });
     }
+    const previewShaft = document.querySelector(
+      '[data-arrow-path-mode="sharp"] [data-line-role="draft-shaft"]',
+    );
+    expect(previewShaft?.getAttribute("d")).not.toContain("C");
+
+    fireEvent.pointerDown(canvas, {
+      button: 0,
+      clientX: 220,
+      clientY: 120,
+      pointerId: 1,
+    });
+    fireEvent.pointerUp(canvas, {
+      button: 0,
+      clientX: 220,
+      clientY: 120,
+      pointerId: 1,
+    });
     fireEvent.doubleClick(canvas, { clientX: 220, clientY: 120 });
 
     const arrow = useEditorStore.getState().project.objects[0];
@@ -121,6 +140,7 @@ describe("map canvas", () => {
       type: "arrow",
       start: { x: 60, y: 60 },
       end: { x: 220, y: 120 },
+      pathMode: "sharp",
     });
     if (arrow?.type === "arrow") {
       expect(arrow.points).toEqual([

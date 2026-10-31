@@ -1,5 +1,6 @@
 import type {
   ArrowObject,
+  ArrowPathMode,
   AtlasProject,
   FreehandObject,
   Layer,
@@ -111,6 +112,7 @@ export function createArrow(
   tint: UnitAffiliation = "objective",
   points: Point[] = [start, end],
   brush?: BrushPreset,
+  pathMode: ArrowPathMode = "smooth",
 ): ArrowObject {
   const width = brush?.arrowWidth ?? 10;
   return {
@@ -130,6 +132,7 @@ export function createArrow(
     opacity: 0.94,
     lineStyle,
     tint,
+    pathMode,
     dashed: false,
     animation: {
       enabled: true,
@@ -147,6 +150,7 @@ export function createArrowPath(
   lineStyle: LineStyle = "solid",
   tint: UnitAffiliation = "objective",
   brush?: BrushPreset,
+  pathMode: ArrowPathMode = "smooth",
 ): ArrowObject {
   const safePoints = points.map((point) => ({ ...point }));
   const start = safePoints[0] ?? { x: 0, y: 0 };
@@ -159,6 +163,7 @@ export function createArrowPath(
     tint,
     safePoints,
     brush,
+    pathMode,
   );
 }
 

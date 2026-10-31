@@ -261,6 +261,15 @@ test("draws folded arrows and directly closed regions", async ({ page }) => {
     "data-path-points",
     "3",
   );
+  await expect(page.locator('[data-object-type="arrow"]')).toHaveAttribute(
+    "data-path-mode",
+    "sharp",
+  );
+  await expect(
+    page.locator(
+      '[data-object-type="arrow"] [data-line-role="shaft"]',
+    ),
+  ).not.toHaveAttribute("d", /\bC\b/);
 
   await page.getByRole("button", { name: "区域直接绘制模式" }).click();
   await page.getByRole("button", { name: "区域", exact: true }).click();

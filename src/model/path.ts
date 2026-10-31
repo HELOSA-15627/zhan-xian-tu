@@ -84,6 +84,17 @@ export function smoothPathData(points: Point[]): string {
   return parts.join(" ");
 }
 
+export function polylinePathData(points: Point[]): string {
+  if (points.length === 0) return "";
+
+  return points
+    .map(
+      (point, index) =>
+        `${index === 0 ? "M" : "L"} ${round(point.x)} ${round(point.y)}`,
+    )
+    .join(" ");
+}
+
 export function trimPathEnd(points: Point[], trimDistance: number): Point[] {
   if (points.length < 2 || trimDistance <= 0) {
     return points.map((point) => ({ ...point }));

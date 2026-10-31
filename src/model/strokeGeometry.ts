@@ -1,5 +1,5 @@
-import { smoothPathData } from "./path";
-import type { Point } from "./types";
+import { polylinePathData, smoothPathData } from "./path";
+import type { ArrowPathMode, Point } from "./types";
 
 export type StrokeFrame = {
   point: Point;
@@ -141,8 +141,12 @@ export function pathFrameAtProgress(
   points: Point[],
   progress: number,
   samplesPerSegment = 16,
+  pathMode: ArrowPathMode = "smooth",
 ): StrokeFrame {
-  const sampled = sampleSmoothPath(points, samplesPerSegment);
+  const sampled =
+    pathMode === "sharp"
+      ? points.map((point) => ({ ...point }))
+      : sampleSmoothPath(points, samplesPerSegment);
   const total = pathLength(sampled);
   return frameAtDistance(
     sampled,
@@ -155,7 +159,24 @@ export function clipSmoothPathToProgress(
   progress: number,
   samplesPerSegment = 16,
 ): Point[] {
-  const sampled = sampleSmoothPath(points, samplesPerSegment);
+  return clipPathToProgress(
+    points,
+    progress,
+    samplesPerSegment,
+    "smooth",
+  );
+}
+
+export function clipPathToProgress(
+  points: Point[],
+  progress: number,
+  samplesPerSegment = 16,
+  pathMode: ArrowPathMode = "smooth",
+): Point[] {
+  const sampled =
+    pathMode === "sharp"
+      ? points.map((point) => ({ ...point }))
+      : sampleSmoothPath(points, samplesPerSegment);
   if (sampled.length === 0) return [];
   const total = pathLength(sampled);
   const target = total * Math.min(1, Math.max(0, progress));
@@ -254,19 +275,21 @@ export function buildTaperedRibbon(
 export function buildOpenOffsetPath(
   points: Point[],
   offset: number,
+  pathMode: ArrowPathMode = "smooth",
 ): string {
   if (points.length < 2) return "";
-  return smoothPathData(
-    points.map((point, index) => {
-      const previous = points[Math.max(0, index - 1)];
-      const next = points[Math.min(points.length - 1, index + 1)];
-      const dx = next.x - previous.x;
-      const dy = next.y - previous.y;
-      const length = Math.hypot(dx, dy) || 1;
-      return {
-        x: point.x + (-dy / length) * offset,
-        y: point.y + (dx / length) * offset,
-      };
-    }),
-  );
+  const offsetPoints = points.map((point, index) => {
+    const previous = points[Math.max(0, index - 1)];
+    const next = points[Math.min(points.length - 1, index + 1)];
+    const dx = next.x - previous.x;
+    const dy = next.y - previous.y;
+    const length = Math.hypot(dx, dy) || 1;
+    return {
+      x: point.x + (-dy / length) * offset,
+      y: point.y + (dx / length) * offset,
+    };
+  });
+  return pathMode === "sharp"
+    ? polylinePathData(offsetPoints)
+    : smoothPathData(offsetPoints);
 }

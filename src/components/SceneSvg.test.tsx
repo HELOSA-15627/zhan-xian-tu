@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   createArrow,
+  createArrowPath,
   createBlankProject,
   createFreehand,
   createMarker,
@@ -737,6 +738,41 @@ describe("scene svg", () => {
     expect(
       head?.querySelector('[data-arrow-head-connector="psd"]'),
     ).toBeInTheDocument();
+  });
+
+  it("renders a sharp arrow with straight segments and mitered corners", () => {
+    const project = createBlankProject();
+    const arrow = createArrowPath(
+      project.layers[0].id,
+      [
+        { x: 20, y: 160 },
+        { x: 120, y: 80 },
+        { x: 240, y: 150 },
+      ],
+      "solid",
+      "objective",
+      undefined,
+      "sharp",
+    );
+    project.objects = [arrow];
+
+    const { container } = render(
+      <SceneSvg
+        project={project}
+        selectedIds={[]}
+        time={null}
+        interactive={false}
+      />,
+    );
+    const shaft = container.querySelector(
+      '[data-object-type="arrow"] [data-line-role="shaft"]',
+    );
+    const pathData = shaft?.getAttribute("d") ?? "";
+
+    expect(pathData).toContain("M");
+    expect(pathData).toContain("L");
+    expect(pathData).not.toContain("C");
+    expect(shaft).toHaveAttribute("stroke-linejoin", "miter");
   });
 
   it("renders phase dashes and ticked defense bars as open geometry", () => {

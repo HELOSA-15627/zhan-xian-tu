@@ -64,6 +64,7 @@ export type LineStyle =
   | "dashdot"
   | "ticked";
 export type SketchMode = "direct" | "polyline";
+export type ArrowPathMode = "smooth" | "sharp";
 export type BrushPresetId =
   | "command"
   | "drafting"
@@ -145,6 +146,7 @@ export type ArrowObject = BaseObject &
   opacity: number;
   lineStyle: LineStyle;
   tint: UnitAffiliation;
+  pathMode: ArrowPathMode;
   dashed: boolean;
   animation: AnimationSpec;
   label: string;
@@ -219,6 +221,7 @@ export type SceneObjectPatch = {
   headStyle?: ArrowHeadStyle;
   lineStyle?: LineStyle;
   tint?: UnitAffiliation;
+  pathMode?: ArrowPathMode;
   dashed?: boolean;
   animation?: AnimationSpec;
   closed?: boolean;

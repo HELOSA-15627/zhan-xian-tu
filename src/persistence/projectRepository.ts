@@ -258,6 +258,8 @@ function validateProject(value: unknown): AtlasProject {
             : next.color === "#9b351f"
               ? "hostile"
               : "objective";
+        next.pathMode =
+          next.pathMode === "sharp" ? "sharp" : "smooth";
       }
       if (!isLineStyle(next.lineStyle)) {
         next.lineStyle =

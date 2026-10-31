@@ -4,6 +4,7 @@ import {
   buildOpenOffsetPath,
   buildTaperedRibbon,
   buildTaperedRibbonPoints,
+  clipPathToProgress,
   clipSmoothPathToProgress,
   pathFrameAtProgress,
 } from "./strokeGeometry";
@@ -46,6 +47,24 @@ describe("stroke geometry", () => {
 
     expect(clipped[0]).toEqual({ x: 0, y: 0 });
     expect(clipped.at(-1)).toMatchObject({ x: 35, y: 0 });
+  });
+
+  it("keeps a sharp animated path on straight segments through a corner", () => {
+    const path = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 100 },
+    ];
+    const frame = pathFrameAtProgress(path, 0.75, 16, "sharp");
+    const clipped = clipPathToProgress(path, 0.75, 16, "sharp");
+
+    expect(frame.point).toMatchObject({ x: 100, y: 50 });
+    expect(frame.angle).toBeCloseTo(Math.PI / 2, 5);
+    expect(clipped).toEqual([
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 50 },
+    ]);
   });
 
   it("builds a wedge from different start and end widths", () => {

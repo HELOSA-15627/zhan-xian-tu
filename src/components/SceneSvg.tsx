@@ -7,11 +7,15 @@ import { getArrowAnimationProgress } from "../model/animation";
 import { flagArtworkAssetFor } from "../model/flags";
 import { lineDashArray, normalizeLineStyle } from "../model/lineStyle";
 import { buildTickMarks } from "../model/linePattern";
-import { smoothPathData, trimPathEnd } from "../model/path";
+import {
+  polylinePathData,
+  smoothPathData,
+  trimPathEnd,
+} from "../model/path";
 import {
   buildOpenOffsetPath,
   buildTaperedRibbon,
-  clipSmoothPathToProgress,
+  clipPathToProgress,
   pathFrameAtProgress,
   sampleSmoothPath,
 } from "../model/strokeGeometry";
@@ -242,6 +246,8 @@ function ObjectNode({
     case "arrow": {
       const points = arrowPoints(object);
       const style = normalizeLineStyle(object.lineStyle);
+      const pathMode =
+        object.pathMode === "sharp" ? "sharp" : "smooth";
       const progress =
         time === null
           ? 1
@@ -258,10 +264,23 @@ function ObjectNode({
         object.headStyle,
         headSize,
       );
-      const headFrame = pathFrameAtProgress(points, progress);
-      const visiblePath = clipSmoothPathToProgress(points, progress);
+      const headFrame = pathFrameAtProgress(
+        points,
+        progress,
+        16,
+        pathMode,
+      );
+      const visiblePath = clipPathToProgress(
+        points,
+        progress,
+        16,
+        pathMode,
+      );
       const shaft = trimPathEnd(visiblePath, headConnectionLength);
-      const shaftPath = smoothPathData(shaft);
+      const shaftPath =
+        pathMode === "sharp"
+          ? polylinePathData(shaft)
+          : smoothPathData(shaft);
       const lineEnd = shaft.at(-1) ?? headFrame.point;
       const headBasePoint = lineEnd;
       const headAngle = (headFrame.angle * 180) / Math.PI + 90;
@@ -284,6 +303,7 @@ function ObjectNode({
           data-line-style={style}
           data-object-id={object.id}
           data-object-type="arrow"
+          data-path-mode={pathMode}
           data-path-points={points.length}
           opacity={object.opacity}
         >
@@ -316,6 +336,7 @@ function ObjectNode({
                   const rail = buildOpenOffsetPath(
                     shaft,
                     direction * Math.max(3, controlWidth * 0.5),
+                    pathMode,
                   );
                   return (
                     <path

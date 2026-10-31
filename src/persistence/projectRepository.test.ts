@@ -59,6 +59,7 @@ describe("project repository", () => {
     >;
     const legacyObjects = legacy.objects as Array<Record<string, unknown>>;
     delete legacyObjects[1].lineStyle;
+    delete legacyObjects[1].pathMode;
 
     const parsed = parseProjectFile(JSON.stringify(legacy));
 
@@ -67,6 +68,7 @@ describe("project repository", () => {
     expect(parsed.objects[1]).toMatchObject({
       type: "arrow",
       lineStyle: "solid",
+      pathMode: "smooth",
     });
   });
 

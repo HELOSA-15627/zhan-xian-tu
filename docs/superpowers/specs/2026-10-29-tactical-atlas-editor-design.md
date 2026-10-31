@@ -25,7 +25,7 @@
 
 - 选择、框选、平移、缩放。
 - 放置战役图标：友军、敌军、指挥部、防线、巢穴、目标、装甲、航空。
-- 箭头支持“直接绘制”和“折线”两种模式：直接模式按住拖动并在松开时完成，折线模式单击增加节点并在双击时完成。
+- 箭头支持“直接绘制”和“折线”两种模式：直接模式按住拖动并在松开时完成并使用平滑笔势；折线模式单击增加节点并在双击时完成，所有边保持直线段、转角保持尖角。
 - 绘制多边形区域和自由手绘线。
 - 箭头的动画头部沿实际曲线路径移动，箭头按当前切线方向旋转，线杆终止于箭头底边。
 - 箭头和手绘线具有总宽度、起点宽度和终点宽度；首尾宽度不同时渲染为填充楔形。
@@ -226,6 +226,7 @@ type AnimationSpec = {
 };
 
 type LineStyle = "solid" | "dashed" | "double" | "dotted";
+type ArrowPathMode = "smooth" | "sharp";
 type ArrowHeadStyle = "psd" | "triangle" | "chevron" | "spear";
 type RegionShapePreset = "custom" | "rectangle" | "ellipse" | "diamond";
 type RegionLineStyle = "solid" | "dashed" | "dotted";
@@ -295,6 +296,7 @@ type SceneObject =
       endWidth: number;
       lineStyle: LineStyle;
       tint: UnitAffiliation;
+      pathMode: ArrowPathMode;
       dashed: boolean;
       animation: AnimationSpec;
       label: string;

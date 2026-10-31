@@ -27,6 +27,7 @@ import {
   appendStabilizedPoint,
   finalAngle,
   measurePath,
+  polylinePathData,
   smoothPathData,
   trimPathEnd,
 } from "../model/path";
@@ -41,6 +42,7 @@ import {
   buildTaperedRibbon,
 } from "../model/strokeGeometry";
 import type {
+  ArrowPathMode,
   LineStyle,
   Point,
   SceneObject,
@@ -115,11 +117,13 @@ function DraftArrow({
   lineStyle,
   tint,
   brush,
+  pathMode,
 }: {
   draft: ArrowDraft;
   lineStyle: LineStyle;
   tint: UnitAffiliation;
   brush: BrushPreset;
+  pathMode: ArrowPathMode;
 }) {
   if (draft.length < 2) return null;
   const dash = lineDashArray(lineStyle, 8);
@@ -127,14 +131,21 @@ function DraftArrow({
   const angle = finalAngle(draft);
   const headSize = Math.max(34, brush.arrowWidth * 2.8);
   const shaft = trimPathEnd(draft, headSize);
+  const shaftPath =
+    pathMode === "sharp"
+      ? polylinePathData(shaft)
+      : smoothPathData(shaft);
   const color = AFFILIATION_COLORS[tint];
 
   return (
-    <g data-line-style={lineStyle}>
+    <g
+      data-arrow-path-mode={pathMode}
+      data-line-style={lineStyle}
+    >
       {lineStyle === "double" ? (
         [-1, 1].map((direction) => (
           <path
-            d={buildOpenOffsetPath(shaft, direction * 5)}
+            d={buildOpenOffsetPath(shaft, direction * 5, pathMode)}
             fill="none"
             key={direction}
             stroke={color}
@@ -158,7 +169,8 @@ function DraftArrow({
       ) : (
         <>
           <path
-            d={smoothPathData(shaft)}
+            data-line-role="draft-shaft"
+            d={shaftPath}
             fill="none"
             stroke={color}
             strokeDasharray={dash}
@@ -329,6 +341,7 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
           activeLineStyle,
           activeAffiliation,
           brush,
+          "sharp",
         ),
       );
     }
@@ -604,7 +617,8 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
             points,
             activeLineStyle,
             activeAffiliation,
-          brush,
+            brush,
+            "smooth",
           ),
         );
       }
@@ -709,6 +723,9 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
               brush={brush}
               draft={arrowPreview}
               lineStyle={activeLineStyle}
+              pathMode={
+                arrowDrawMode === "polyline" ? "sharp" : "smooth"
+              }
               tint={activeAffiliation}
             />
           ) : null}
