@@ -20,6 +20,7 @@ import {
   artworkSourceFor,
   defaultArtworkForSymbol,
 } from "./unitAssets";
+import type { BrushPreset } from "./brushes";
 
 const DEFAULT_WIDTH = 1600;
 const DEFAULT_HEIGHT = 900;
@@ -109,7 +110,9 @@ export function createArrow(
   lineStyle: LineStyle = "solid",
   tint: UnitAffiliation = "objective",
   points: Point[] = [start, end],
+  brush?: BrushPreset,
 ): ArrowObject {
+  const width = brush?.arrowWidth ?? 10;
   return {
     id: createId("arrow"),
     layerId,
@@ -119,9 +122,9 @@ export function createArrow(
     end,
     points: points.map((point) => ({ ...point })),
     color: AFFILIATION_COLORS[tint],
-    width: 10,
-    startWidth: 10,
-    endWidth: 10,
+    width,
+    startWidth: brush?.startWidth ?? width,
+    endWidth: brush?.endWidth ?? width,
     headSize: 34,
     headStyle: "psd",
     opacity: 0.94,
@@ -143,11 +146,20 @@ export function createArrowPath(
   points: Point[],
   lineStyle: LineStyle = "solid",
   tint: UnitAffiliation = "objective",
+  brush?: BrushPreset,
 ): ArrowObject {
   const safePoints = points.map((point) => ({ ...point }));
   const start = safePoints[0] ?? { x: 0, y: 0 };
   const end = safePoints.at(-1) ?? start;
-  return createArrow(layerId, start, end, lineStyle, tint, safePoints);
+  return createArrow(
+    layerId,
+    start,
+    end,
+    lineStyle,
+    tint,
+    safePoints,
+    brush,
+  );
 }
 
 export function createRegion(layerId: string, points: Point[]): RegionObject {
@@ -194,7 +206,9 @@ export function createFreehand(
   layerId: string,
   points: Point[],
   lineStyle: LineStyle = "solid",
+  brush?: BrushPreset,
 ): FreehandObject {
+  const strokeWidth = brush?.freehandWidth ?? 4;
   return {
     id: createId("freehand"),
     layerId,
@@ -202,9 +216,9 @@ export function createFreehand(
     name: "手绘线",
     points: points.map((point) => ({ ...point })),
     color: "#315c70",
-    strokeWidth: 4,
-    startWidth: 4,
-    endWidth: 4,
+    strokeWidth,
+    startWidth: brush?.startWidth ?? strokeWidth,
+    endWidth: brush?.endWidth ?? strokeWidth,
     opacity: 1,
     lineStyle,
     label: "",

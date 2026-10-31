@@ -55,7 +55,20 @@ export type MarkerArtworkId =
   | NatoArtworkId
   | FlagArtworkId;
 
-export type LineStyle = "solid" | "dashed" | "double" | "dotted";
+export type LineStyle =
+  | "solid"
+  | "dashed"
+  | "double"
+  | "dotted"
+  | "phase"
+  | "dashdot"
+  | "ticked";
+export type SketchMode = "direct" | "polyline";
+export type BrushPresetId =
+  | "command"
+  | "drafting"
+  | "advance"
+  | "taper";
 export type ArrowHeadStyle = "psd" | "triangle" | "chevron" | "spear";
 export type RegionShapePreset =
   | "custom"

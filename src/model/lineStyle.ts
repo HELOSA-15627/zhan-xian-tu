@@ -27,6 +27,21 @@ export const LINE_STYLE_OPTIONS: LineStyleOption[] = [
     label: "警戒点线",
     description: "点线表示监视或警戒范围",
   },
+  {
+    value: "phase",
+    label: "阶段线",
+    description: "长划表示阶段控制线",
+  },
+  {
+    value: "dashdot",
+    label: "边界点划",
+    description: "长划与点交替表示行动边界",
+  },
+  {
+    value: "ticked",
+    label: "栅栏防线",
+    description: "中心线加规则横齿表示防线",
+  },
 ];
 
 export function isLineStyle(value: unknown): value is LineStyle {
@@ -55,8 +70,13 @@ export function lineDashArray(
       return `${Math.max(12, safeWidth * 2.4)} ${Math.max(7, safeWidth * 1.25)}`;
     case "dotted":
       return `${Math.max(1.5, safeWidth * 0.28)} ${Math.max(6, safeWidth * 1.4)}`;
+    case "phase":
+      return `${Math.max(22, safeWidth * 3.8)} ${Math.max(10, safeWidth * 1.8)}`;
+    case "dashdot":
+      return `${Math.max(18, safeWidth * 3)} ${Math.max(6, safeWidth)} ${Math.max(2, safeWidth * 0.3)} ${Math.max(6, safeWidth)}`;
     case "solid":
     case "double":
+    case "ticked":
       return undefined;
   }
 }

@@ -8,6 +8,9 @@ import { MapCanvas } from "./MapCanvas";
 describe("map canvas", () => {
   beforeEach(() => {
     useEditorStore.getState().createNewProject();
+    useEditorStore.getState().setArrowDrawMode("direct");
+    useEditorStore.getState().setRegionDrawMode("polyline");
+    useEditorStore.getState().setActiveBrush("advance");
   });
 
   it("places a marker when clicking with the marker tool", () => {
@@ -84,6 +87,120 @@ describe("map canvas", () => {
     });
     const arrow = useEditorStore.getState().project.objects[0];
     expect(arrow?.type === "arrow" ? arrow.points.length : 0).toBeGreaterThan(2);
+  });
+
+  it("creates a folded arrow from discrete clicks and double click", () => {
+    const store = useEditorStore.getState();
+    store.setArrowDrawMode("polyline");
+    store.setTool("arrow");
+    render(<MapCanvas />);
+    const canvas = screen.getByTestId("map-canvas");
+
+    for (const point of [
+      { x: 60, y: 60 },
+      { x: 160, y: 60 },
+      { x: 220, y: 120 },
+    ]) {
+      fireEvent.pointerDown(canvas, {
+        button: 0,
+        clientX: point.x,
+        clientY: point.y,
+        pointerId: 1,
+      });
+      fireEvent.pointerUp(canvas, {
+        button: 0,
+        clientX: point.x,
+        clientY: point.y,
+        pointerId: 1,
+      });
+    }
+    fireEvent.doubleClick(canvas, { clientX: 220, clientY: 120 });
+
+    const arrow = useEditorStore.getState().project.objects[0];
+    expect(arrow).toMatchObject({
+      type: "arrow",
+      start: { x: 60, y: 60 },
+      end: { x: 220, y: 120 },
+    });
+    if (arrow?.type === "arrow") {
+      expect(arrow.points).toEqual([
+        { x: 60, y: 60 },
+        { x: 160, y: 60 },
+        { x: 220, y: 120 },
+      ]);
+    }
+  });
+
+  it("closes a directly drawn region when the pointer is released", () => {
+    const store = useEditorStore.getState();
+    store.setRegionDrawMode("direct");
+    store.setTool("region");
+    render(<MapCanvas />);
+    const canvas = screen.getByTestId("map-canvas");
+
+    fireEvent.pointerDown(canvas, {
+      button: 0,
+      clientX: 80,
+      clientY: 80,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(canvas, {
+      clientX: 180,
+      clientY: 80,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(canvas, {
+      clientX: 180,
+      clientY: 170,
+      pointerId: 1,
+    });
+    fireEvent.pointerUp(canvas, {
+      button: 0,
+      clientX: 90,
+      clientY: 170,
+      pointerId: 1,
+    });
+
+    const region = useEditorStore.getState().project.objects[0];
+    expect(region).toMatchObject({ type: "region", closed: true });
+    if (region?.type === "region") {
+      expect(region.points.length).toBeGreaterThanOrEqual(3);
+      expect(region.points[0]).not.toEqual(region.points.at(-1));
+    }
+  });
+
+  it("applies the selected brush to newly created arrows", () => {
+    const store = useEditorStore.getState();
+    store.setArrowDrawMode("direct");
+    store.setActiveBrush("taper");
+    store.setTool("arrow");
+    render(<MapCanvas />);
+    const canvas = screen.getByTestId("map-canvas");
+
+    fireEvent.pointerDown(canvas, {
+      button: 0,
+      clientX: 50,
+      clientY: 50,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(canvas, {
+      clientX: 210,
+      clientY: 130,
+      pointerId: 1,
+    });
+    fireEvent.pointerUp(canvas, {
+      button: 0,
+      clientX: 210,
+      clientY: 130,
+      pointerId: 1,
+    });
+
+    expect(useEditorStore.getState().project.objects[0]).toMatchObject({
+      type: "arrow",
+      width: 12,
+      startWidth: 12,
+      endWidth: 2,
+    });
   });
 
   it("keeps freehand paths open after pointer release", () => {

@@ -12,6 +12,8 @@ import {
   screenToWorld,
   zoomAt,
 } from "../model/geometry";
+import { brushPresetFor } from "../model/brushes";
+import type { BrushPreset } from "../model/brushes";
 import {
   createArrowPath,
   createFreehand,
@@ -20,6 +22,7 @@ import {
   createText,
 } from "../model/project";
 import { lineDashArray } from "../model/lineStyle";
+import { buildTickMarks } from "../model/linePattern";
 import {
   appendStabilizedPoint,
   finalAngle,
@@ -33,7 +36,10 @@ import {
   nearestRegionBoundaryPoint,
   regionContainsPoint,
 } from "../model/regionGeometry";
-import { buildOpenOffsetPath } from "../model/strokeGeometry";
+import {
+  buildOpenOffsetPath,
+  buildTaperedRibbon,
+} from "../model/strokeGeometry";
 import type {
   LineStyle,
   Point,
@@ -67,6 +73,11 @@ type ClickPlacement = {
   pointerId: number;
 };
 
+type FoldClickPlacement = {
+  start: Point;
+  pointerId: number;
+};
+
 function localPoint(
   event: { clientX: number; clientY: number },
   element: HTMLElement,
@@ -89,20 +100,32 @@ function compactPoints(points: Point[]): Point[] {
   );
 }
 
+function polygonArea(points: Point[]): number {
+  let total = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index];
+    const next = points[(index + 1) % points.length];
+    total += current.x * next.y - next.x * current.y;
+  }
+  return Math.abs(total) / 2;
+}
+
 function DraftArrow({
   draft,
   lineStyle,
   tint,
+  brush,
 }: {
   draft: ArrowDraft;
   lineStyle: LineStyle;
   tint: UnitAffiliation;
+  brush: BrushPreset;
 }) {
   if (draft.length < 2) return null;
   const dash = lineDashArray(lineStyle, 8);
   const end = draft.at(-1) as Point;
   const angle = finalAngle(draft);
-  const headSize = 34;
+  const headSize = Math.max(34, brush.arrowWidth * 2.8);
   const shaft = trimPathEnd(draft, headSize);
   const color = AFFILIATION_COLORS[tint];
 
@@ -118,19 +141,46 @@ function DraftArrow({
             strokeDasharray={dash}
             strokeLinecap="butt"
             strokeLinejoin="miter"
-            strokeWidth="3"
+            strokeWidth={Math.max(1.5, brush.arrowWidth * 0.25)}
           />
         ))
-      ) : (
+      ) : lineStyle === "solid" &&
+        brush.startWidth !== brush.endWidth ? (
         <path
-          d={smoothPathData(shaft)}
-          fill="none"
-          stroke={color}
-          strokeDasharray={dash}
-          strokeLinecap="butt"
-          strokeLinejoin="miter"
-          strokeWidth="8"
+          d={buildTaperedRibbon(
+            shaft,
+            brush.startWidth,
+            brush.endWidth,
+          )}
+          fill={color}
+          stroke="none"
         />
+      ) : (
+        <>
+          <path
+            d={smoothPathData(shaft)}
+            fill="none"
+            stroke={color}
+            strokeDasharray={dash}
+            strokeLinecap="butt"
+            strokeLinejoin="miter"
+            strokeWidth={brush.arrowWidth}
+          />
+          {lineStyle === "ticked" ? (
+            <path
+              d={buildTickMarks(
+                shaft,
+                Math.max(14, brush.arrowWidth * 2.4),
+                Math.max(8, brush.arrowWidth * 1.8),
+              )}
+              fill="none"
+              stroke={color}
+              strokeLinecap="butt"
+              strokeLinejoin="miter"
+              strokeWidth={Math.max(1.5, brush.arrowWidth * 0.32)}
+            />
+          ) : null}
+        </>
       )}
       <image
         data-arrow-head-preview="true"
@@ -154,9 +204,17 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
   } | null>(null);
   const objectDragRef = useRef<ObjectDrag | null>(null);
   const clickPlacementRef = useRef<ClickPlacement | null>(null);
+  const foldClickPlacementRef = useRef<FoldClickPlacement | null>(null);
+  const foldArrowRef = useRef<Point[]>([]);
+  const foldRegionRef = useRef<Point[]>([]);
   const [arrowDraft, setArrowDraft] = useState<ArrowDraft | null>(null);
+  const [foldArrowDraft, setFoldArrowDraft] = useState<Point[]>([]);
   const [freehandDraft, setFreehandDraft] = useState<FreehandDraft>([]);
   const [regionDraft, setRegionDraft] = useState<Point[]>([]);
+  const [directRegionDraft, setDirectRegionDraft] = useState<Point[] | null>(
+    null,
+  );
+  const [foldCursor, setFoldCursor] = useState<Point | null>(null);
 
   const project = useEditorStore((state) => state.project);
   const viewport = useEditorStore((state) => state.viewport);
@@ -172,12 +230,16 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
     (state) => state.activeArtworkSource,
   );
   const activeLineStyle = useEditorStore((state) => state.activeLineStyle);
+  const arrowDrawMode = useEditorStore((state) => state.arrowDrawMode);
+  const regionDrawMode = useEditorStore((state) => state.regionDrawMode);
+  const activeBrush = useEditorStore((state) => state.activeBrush);
   const strokeDamping = useEditorStore((state) => state.strokeDamping);
   const setViewport = useEditorStore((state) => state.setViewport);
   const setTool = useEditorStore((state) => state.setTool);
   const setSelection = useEditorStore((state) => state.setSelection);
   const addObject = useEditorStore((state) => state.addObject);
   const updateObject = useEditorStore((state) => state.updateObject);
+  const brush = brushPresetFor(activeBrush);
 
   const activeLayer = project.layers.find((layer) => layer.id === activeLayerId);
   const drawingEnabled = Boolean(
@@ -209,8 +271,14 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setArrowDraft(null);
+        foldArrowRef.current = [];
+        setFoldArrowDraft([]);
         setFreehandDraft([]);
         setRegionDraft([]);
+        foldRegionRef.current = [];
+        setDirectRegionDraft(null);
+        setFoldCursor(null);
+        foldClickPlacementRef.current = null;
         setTool("select");
       }
     };
@@ -242,11 +310,31 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
   };
 
   const finishRegion = () => {
-    const points = compactPoints(regionDraft);
+    const points = compactPoints(foldRegionRef.current);
     if (points.length >= 3 && drawingEnabled) {
       addObject(createRegion(activeLayerId, points));
     }
+    foldRegionRef.current = [];
     setRegionDraft([]);
+    setFoldCursor(null);
+  };
+
+  const finishArrow = () => {
+    const points = compactPoints(foldArrowRef.current);
+    if (points.length >= 2 && measurePath(points) > 4 && drawingEnabled) {
+      addObject(
+        createArrowPath(
+          activeLayerId,
+          points,
+          activeLineStyle,
+          activeAffiliation,
+          brush,
+        ),
+      );
+    }
+    foldArrowRef.current = [];
+    setFoldArrowDraft([]);
+    setFoldCursor(null);
   };
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -307,7 +395,7 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
       }
     }
 
-    if (tool === "marker" || tool === "text" || tool === "region") {
+    if (tool === "marker" || tool === "text") {
       clickPlacementRef.current = {
         tool,
         start: world,
@@ -317,8 +405,29 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
       return;
     }
 
+    if (tool === "region") {
+      if (regionDrawMode === "direct") {
+        setDirectRegionDraft([world]);
+      } else {
+        clickPlacementRef.current = {
+          tool: "region",
+          start: world,
+          pointerId: event.pointerId,
+        };
+      }
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      return;
+    }
+
     if (tool === "arrow") {
-      setArrowDraft([world]);
+      if (arrowDrawMode === "direct") {
+        setArrowDraft([world]);
+      } else {
+        foldClickPlacementRef.current = {
+          start: world,
+          pointerId: event.pointerId,
+        };
+      }
       event.currentTarget.setPointerCapture?.(event.pointerId);
       return;
     }
@@ -362,6 +471,23 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
       return;
     }
 
+    if (directRegionDraft !== null) {
+      const coalesced = event.nativeEvent.getCoalescedEvents?.();
+      const samples =
+        coalesced && coalesced.length > 0 ? coalesced : [event.nativeEvent];
+      setDirectRegionDraft((points) =>
+        samples.reduce(
+          (next, sample) =>
+            appendStabilizedPoint(next ?? [], toWorld(sample), {
+              minDistance: 2,
+              smoothing: Math.max(0.08, 1 - strokeDamping),
+            }),
+          points ?? [],
+        ),
+      );
+      return;
+    }
+
     if (freehandDraft.length > 0) {
       const coalesced = event.nativeEvent.getCoalescedEvents?.();
       const samples =
@@ -376,6 +502,17 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
         ),
       );
       return;
+    }
+
+    if (
+      (tool === "arrow" &&
+        arrowDrawMode === "polyline" &&
+        foldArrowRef.current.length > 0) ||
+      (tool === "region" &&
+        regionDrawMode === "polyline" &&
+        foldRegionRef.current.length > 0)
+    ) {
+      setFoldCursor(toWorld(event));
     }
 
     if (objectDragRef.current) {
@@ -411,13 +548,49 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
       } else if (placement.tool === "text") {
         addObject(createText(activeLayerId, placement.start));
       } else {
-        setRegionDraft((points) =>
-          appendStabilizedPoint(points, placement.start, {
-            minDistance: 3,
-            smoothing: 0.8,
-          }),
-        );
+        const next = compactPoints([
+          ...foldRegionRef.current,
+          placement.start,
+        ]);
+        foldRegionRef.current = next;
+        setRegionDraft(next);
       }
+      return;
+    }
+
+    if (foldClickPlacementRef.current) {
+      const placement = foldClickPlacementRef.current;
+      foldClickPlacementRef.current = null;
+      const end = toWorld(event);
+      const moved = Math.hypot(
+        end.x - placement.start.x,
+        end.y - placement.start.y,
+      );
+      if (moved <= 4) {
+        const next = compactPoints([
+          ...foldArrowRef.current,
+          placement.start,
+        ]);
+        foldArrowRef.current = next;
+        setFoldArrowDraft(next);
+        setFoldCursor(placement.start);
+      }
+      return;
+    }
+
+    if (directRegionDraft !== null) {
+      const points = compactPoints([
+        ...directRegionDraft,
+        toWorld(event),
+      ]);
+      if (
+        points.length >= 3 &&
+        polygonArea(points) >= 24 &&
+        drawingEnabled
+      ) {
+        addObject(createRegion(activeLayerId, points));
+      }
+      setDirectRegionDraft(null);
       return;
     }
 
@@ -431,6 +604,7 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
             points,
             activeLineStyle,
             activeAffiliation,
+          brush,
           ),
         );
       }
@@ -445,6 +619,7 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
           activeLayerId,
           [...freehandDraft, end],
           activeLineStyle,
+          brush,
         ),
       );
       setFreehandDraft([]);
@@ -471,6 +646,17 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
     setViewport(zoomAt(viewport, point, nextScale));
   };
 
+  const foldArrowPreview =
+    foldCursor && foldArrowDraft.length > 0
+      ? compactPoints([...foldArrowDraft, foldCursor])
+      : foldArrowDraft;
+  const foldRegionPreview =
+    foldCursor && regionDraft.length > 0
+      ? compactPoints([...regionDraft, foldCursor])
+      : regionDraft;
+  const regionPreview = directRegionDraft ?? foldRegionPreview;
+  const arrowPreview = arrowDraft ?? foldArrowPreview;
+
   return (
     <section
       aria-label="地图绘制区域"
@@ -478,7 +664,12 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
       className={`canvas-viewport tool-${tool}`}
       data-testid="map-canvas"
       onDoubleClick={() => {
-        if (tool === "region") finishRegion();
+        if (tool === "region" && regionDrawMode === "polyline") {
+          finishRegion();
+        }
+        if (tool === "arrow" && arrowDrawMode === "polyline") {
+          finishArrow();
+        }
       }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -513,9 +704,10 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
           viewBox={`0 0 ${project.width} ${project.height}`}
           width={project.width}
         >
-          {arrowDraft ? (
+          {arrowPreview.length > 0 ? (
             <DraftArrow
-              draft={arrowDraft}
+              brush={brush}
+              draft={arrowPreview}
               lineStyle={activeLineStyle}
               tint={activeAffiliation}
             />
@@ -532,12 +724,17 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
               strokeWidth="4"
             />
           ) : null}
-          {regionDraft.length > 0 ? (
-            <g data-region-preview="true">
+          {regionPreview.length > 0 ? (
+            <g
+              data-region-mode={
+                directRegionDraft !== null ? "direct" : "polyline"
+              }
+              data-region-preview="true"
+            >
               <polyline
                 data-line-role="preview-boundary"
                 fill="none"
-                points={regionDraft
+                points={regionPreview
                   .map((point) => `${point.x},${point.y}`)
                   .join(" ")}
                 stroke={AFFILIATION_COLORS.objective}

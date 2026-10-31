@@ -13,6 +13,11 @@ import {
   UNIT_TINTS,
 } from "../model/unitAssets";
 import { CUSTOM_ASSETS } from "../model/customAssets";
+import {
+  BRUSH_PRESETS,
+} from "../model/brushes";
+import { buildTickMarks } from "../model/linePattern";
+import { buildTaperedRibbon } from "../model/strokeGeometry";
 import { FLAG_ASSETS, defaultFlagArtwork } from "../model/flags";
 import { useEditorStore } from "../store/editorStore";
 import { TacticalSymbol } from "./TacticalSymbol";
@@ -38,6 +43,20 @@ function LineStylePreview({
           <path d="M5 8 H67" />
           <path d="M5 16 H67" />
         </>
+      ) : style === "ticked" ? (
+        <>
+          <path d="M5 12 H67" />
+          <path
+            d={buildTickMarks(
+              [
+                { x: 5, y: 12 },
+                { x: 67, y: 12 },
+              ],
+              9,
+              12,
+            )}
+          />
+        </>
       ) : (
         <path
           d="M5 12 H67"
@@ -56,6 +75,9 @@ export function AssetLibrary() {
   );
   const activeArtwork = useEditorStore((state) => state.activeArtwork);
   const activeLineStyle = useEditorStore((state) => state.activeLineStyle);
+  const arrowDrawMode = useEditorStore((state) => state.arrowDrawMode);
+  const regionDrawMode = useEditorStore((state) => state.regionDrawMode);
+  const activeBrush = useEditorStore((state) => state.activeBrush);
   const activeArtworkSource = useEditorStore(
     (state) => state.activeArtworkSource,
   );
@@ -72,6 +94,13 @@ export function AssetLibrary() {
   const setActiveLineStyle = useEditorStore(
     (state) => state.setActiveLineStyle,
   );
+  const setArrowDrawMode = useEditorStore(
+    (state) => state.setArrowDrawMode,
+  );
+  const setRegionDrawMode = useEditorStore(
+    (state) => state.setRegionDrawMode,
+  );
+  const setActiveBrush = useEditorStore((state) => state.setActiveBrush);
   const setTool = useEditorStore((state) => state.setTool);
   const visibleAssets = UNIT_ASSETS.filter(
     (asset) => asset.defaultAffiliation === activeAffiliation,
@@ -465,7 +494,7 @@ export function AssetLibrary() {
       <div className="library-divider" />
       <div className="panel-heading panel-heading--compact">
         <span>笔刷与线型</span>
-        <span className="count-pill">4 种</span>
+        <span className="count-pill">{LINE_STYLE_OPTIONS.length} 种</span>
       </div>
       <div className="line-style-list">
         {LINE_STYLE_OPTIONS.map((option) => (
@@ -481,6 +510,101 @@ export function AssetLibrary() {
           >
             <LineStylePreview color={activeColor} style={option.value} />
             <span>{option.label}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="library-divider" />
+      <div className="panel-heading panel-heading--compact">
+        <span>绘制模式</span>
+        <span className="count-pill">2 组</span>
+      </div>
+      <div className="draw-mode-grid">
+        <div className="draw-mode-group">
+          <span>箭头</span>
+          <div className="draw-mode-options">
+            {[
+              { value: "direct" as const, label: "直接" },
+              { value: "polyline" as const, label: "折线" },
+            ].map((mode) => (
+              <button
+                aria-label={`箭头${mode.label}绘制模式`}
+                aria-pressed={arrowDrawMode === mode.value}
+                className="draw-mode-button"
+                key={mode.value}
+                onClick={() => setArrowDrawMode(mode.value)}
+                type="button"
+              >
+                {mode.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="draw-mode-group">
+          <span>区域</span>
+          <div className="draw-mode-options">
+            {[
+              { value: "direct" as const, label: "直接" },
+              { value: "polyline" as const, label: "折线" },
+            ].map((mode) => (
+              <button
+                aria-label={`区域${mode.label}绘制模式`}
+                aria-pressed={regionDrawMode === mode.value}
+                className="draw-mode-button"
+                key={mode.value}
+                onClick={() => setRegionDrawMode(mode.value)}
+                type="button"
+              >
+                {mode.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      <p className="panel-copy">
+        直接模式按住拖动、松开完成；折线模式单击加点、双击完成。
+      </p>
+
+      <div className="panel-heading panel-heading--compact">
+        <span>笔刷预设</span>
+        <span className="count-pill">{BRUSH_PRESETS.length} 种</span>
+      </div>
+      <div className="brush-preset-grid">
+        {BRUSH_PRESETS.map((preset) => (
+          <button
+            aria-label={`使用${preset.label}`}
+            aria-pressed={activeBrush === preset.id}
+            className="brush-preset-card"
+            key={preset.id}
+            onClick={() => setActiveBrush(preset.id)}
+            title={preset.description}
+            type="button"
+          >
+            <svg aria-hidden="true" viewBox="0 0 72 18">
+              {preset.startWidth !== preset.endWidth ? (
+                <path
+                  d={buildTaperedRibbon(
+                    [
+                      { x: 4, y: 9 },
+                      { x: 68, y: 9 },
+                    ],
+                    preset.startWidth * 0.7,
+                    preset.endWidth * 0.7,
+                  )}
+                  fill={activeColor}
+                  stroke="none"
+                />
+              ) : (
+                <path
+                  d="M4 9 H68"
+                  fill="none"
+                  stroke={activeColor}
+                  strokeLinecap="butt"
+                  strokeWidth={Math.max(1, preset.arrowWidth * 0.55)}
+                />
+              )}
+            </svg>
+            <span>{preset.label}</span>
           </button>
         ))}
       </div>

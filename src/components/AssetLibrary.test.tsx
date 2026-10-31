@@ -23,6 +23,24 @@ describe("asset library", () => {
     expect(screen.getByText("防线双轨")).toBeInTheDocument();
   });
 
+  it("switches drawing modes and applies a new brush preset", async () => {
+    render(<AssetLibrary />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "箭头折线绘制模式" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "区域直接绘制模式" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "使用渐细笔" }));
+
+    expect(useEditorStore.getState()).toMatchObject({
+      arrowDrawMode: "polyline",
+      regionDrawMode: "direct",
+      activeBrush: "taper",
+    });
+  });
+
   it("switches among friendly, hostile and objective PSD artwork", async () => {
     render(<AssetLibrary />);
 

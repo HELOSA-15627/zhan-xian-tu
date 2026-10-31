@@ -86,6 +86,29 @@ describe("editor store", () => {
     expect(useEditorStore.getState().past).toHaveLength(historyLength);
   });
 
+  it("switches arrow, region and brush settings without creating history", () => {
+    const historyLength = useEditorStore.getState().past.length;
+    const store = useEditorStore.getState();
+
+    store.setArrowDrawMode("polyline");
+    store.setRegionDrawMode("direct");
+    store.setActiveBrush("taper");
+
+    expect(useEditorStore.getState()).toMatchObject({
+      arrowDrawMode: "polyline",
+      regionDrawMode: "direct",
+      activeBrush: "taper",
+    });
+    expect(localStorage.getItem("tactical-atlas:arrow-draw-mode")).toBe(
+      "polyline",
+    );
+    expect(localStorage.getItem("tactical-atlas:region-draw-mode")).toBe(
+      "direct",
+    );
+    expect(localStorage.getItem("tactical-atlas:active-brush")).toBe("taper");
+    expect(useEditorStore.getState().past).toHaveLength(historyLength);
+  });
+
   it("replaces the background and map dimensions together", () => {
     useEditorStore
       .getState()

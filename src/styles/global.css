@@ -550,6 +550,77 @@ textarea:focus-visible {
   gap: 6px;
 }
 
+.draw-mode-grid {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 14px;
+}
+
+.draw-mode-group {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.draw-mode-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.draw-mode-button {
+  min-height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: #0f1219;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.draw-mode-button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--signal) 55%, var(--line));
+  background: var(--graphite-raised);
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--signal);
+}
+
+.brush-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  margin-bottom: 12px;
+}
+
+.brush-preset-card {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 7px 6px 6px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: #0f1219;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 9px;
+  text-align: left;
+}
+
+.brush-preset-card svg {
+  width: 100%;
+  height: 18px;
+  overflow: visible;
+}
+
+.brush-preset-card[aria-pressed="true"] {
+  border-color: var(--signal);
+  background: var(--graphite-raised);
+  color: var(--text);
+}
+
 .line-style-card {
   display: grid;
   min-height: 58px;

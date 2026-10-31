@@ -615,4 +615,168 @@ describe("scene svg", () => {
       container.querySelector('[stroke="#171a1c"], [stroke="#181a1c"]'),
     ).not.toBeInTheDocument();
   });
+
+  it("tints the PSD arrowhead with the arrow line color", () => {
+    const project = createBlankProject();
+    const arrow = createArrow(
+      project.layers[0].id,
+      { x: 20, y: 80 },
+      { x: 220, y: 80 },
+    );
+    arrow.color = "#d13a8f";
+    arrow.headStyle = "psd";
+    project.objects = [arrow];
+
+    const { container } = render(
+      <SceneSvg
+        project={project}
+        selectedIds={[]}
+        time={null}
+        interactive={false}
+      />,
+    );
+    const filter = container.querySelector(
+      '[data-arrow-head-filter="line-color"]',
+    );
+    const head = container.querySelector(
+      '[data-arrow-head-image="psd"]',
+    );
+
+    expect(filter?.querySelector("feFlood")).toHaveAttribute(
+      "flood-color",
+      "#d13a8f",
+    );
+    expect(head).toHaveAttribute("filter");
+    expect(
+      container.querySelector(
+        '[data-object-type="arrow"] [data-artwork-outline]',
+      ),
+    ).not.toBeInTheDocument();
+  });
+
+  it("bridges a PSD shaft with a flat connector instead of entering the head", () => {
+    const project = createBlankProject();
+    const arrow = createArrow(
+      project.layers[0].id,
+      { x: 0, y: 0 },
+      { x: 200, y: 0 },
+    );
+    arrow.headSize = 40;
+    arrow.headStyle = "psd";
+    project.objects = [arrow];
+
+    const { container } = render(
+      <SceneSvg
+        project={project}
+        selectedIds={[]}
+        time={null}
+        interactive={false}
+      />,
+    );
+    const head = container.querySelector("[data-arrow-head]");
+    const [headX, headY] = (
+      head?.getAttribute("data-arrow-head-point") ?? ""
+    ).split(",").map(Number);
+    const [lineX, lineY] = (
+      head?.getAttribute("data-head-base-point") ?? ""
+    ).split(",").map(Number);
+    const distanceFromTip = Math.hypot(headX - lineX, headY - lineY);
+    const connector = container.querySelector(
+      '[data-arrow-head-connector="psd"]',
+    );
+
+    expect(distanceFromTip).toBeCloseTo(40, 1);
+    expect(connector).toHaveAttribute("fill", arrow.color);
+    expect(connector?.tagName.toLowerCase()).toBe("rect");
+  });
+
+  it("clips a wide dotted PSD shaft at the arrowhead base", () => {
+    const project = createBlankProject();
+    const arrow = createArrow(
+      project.layers[0].id,
+      { x: 0, y: 0 },
+      { x: 200, y: 0 },
+    );
+    arrow.headSize = 40;
+    arrow.headStyle = "psd";
+    arrow.lineStyle = "dotted";
+    arrow.width = 10;
+    arrow.startWidth = 10;
+    arrow.endWidth = 10;
+    project.objects = [arrow];
+
+    const { container } = render(
+      <SceneSvg
+        project={project}
+        selectedIds={[]}
+        time={null}
+        interactive={false}
+      />,
+    );
+    const head = container.querySelector("[data-arrow-head]");
+    const [headX, headY] = (
+      head?.getAttribute("data-arrow-head-point") ?? ""
+    ).split(",").map(Number);
+    const [lineX, lineY] = (
+      head?.getAttribute("data-head-base-point") ?? ""
+    ).split(",").map(Number);
+    const shaft = container.querySelector(
+      '[data-object-type="arrow"] [data-line-role="shaft"]',
+    );
+    const clip = container.querySelector(
+      '[data-arrow-head-clip="psd"]',
+    );
+    const clipId = clip?.getAttribute("id");
+
+    expect(Math.hypot(headX - lineX, headY - lineY)).toBeCloseTo(40, 1);
+    expect(clipId).toMatch(/^arrow-head-clip-/);
+    expect(shaft?.parentElement).toHaveAttribute(
+      "clip-path",
+      `url(#${clipId})`,
+    );
+    expect(
+      head?.querySelector('[data-arrow-head-connector="psd"]'),
+    ).toBeInTheDocument();
+  });
+
+  it("renders phase dashes and ticked defense bars as open geometry", () => {
+    const project = createBlankProject();
+    const arrow = createArrow(
+      project.layers[0].id,
+      { x: 20, y: 80 },
+      { x: 220, y: 80 },
+    );
+    arrow.lineStyle = "phase";
+    const line = createFreehand(project.layers[0].id, [
+      { x: 30, y: 180 },
+      { x: 130, y: 170 },
+      { x: 230, y: 190 },
+    ]);
+    line.lineStyle = "ticked";
+    project.objects = [arrow, line];
+
+    const { container } = render(
+      <SceneSvg
+        project={project}
+        selectedIds={[]}
+        time={null}
+        interactive={false}
+      />,
+    );
+    const phase = container.querySelector(
+      '[data-object-type="arrow"] [data-line-role="shaft"]',
+    );
+    const tick = container.querySelector(
+      '[data-object-type="freehand"] [data-line-role="tick"]',
+    );
+
+    expect(phase?.getAttribute("stroke-dasharray")).toMatch(/.+/);
+    expect(tick).toBeInTheDocument();
+    expect(tick?.getAttribute("d")).not.toContain("Z");
+    expect(
+      container.querySelector(
+        '[data-object-type="freehand"] [stroke="#171a1c"]',
+      ),
+    ).not.toBeInTheDocument();
+  });
 });

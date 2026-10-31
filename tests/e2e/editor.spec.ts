@@ -240,6 +240,128 @@ test("edits arrowhead size and selects additional arrow styles", async ({
   );
 });
 
+test("draws folded arrows and directly closed regions", async ({ page }) => {
+  await page.getByRole("button", { name: "箭头折线绘制模式" }).click();
+  await page.getByRole("button", { name: "箭头", exact: true }).click();
+  const canvas = page.getByTestId("map-canvas");
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("Map canvas has no layout box");
+  const points = [
+    { x: box.x + box.width * 0.25, y: box.y + box.height * 0.65 },
+    { x: box.x + box.width * 0.47, y: box.y + box.height * 0.5 },
+    { x: box.x + box.width * 0.72, y: box.y + box.height * 0.38 },
+  ];
+
+  await page.mouse.click(points[0].x, points[0].y);
+  await page.mouse.click(points[1].x, points[1].y);
+  await page.mouse.dblclick(points[2].x, points[2].y);
+
+  await expect(page.locator('[data-object-type="arrow"]')).toHaveCount(1);
+  await expect(page.locator('[data-object-type="arrow"]')).toHaveAttribute(
+    "data-path-points",
+    "3",
+  );
+
+  await page.getByRole("button", { name: "区域直接绘制模式" }).click();
+  await page.getByRole("button", { name: "区域", exact: true }).click();
+  await page.mouse.move(
+    box.x + box.width * 0.32,
+    box.y + box.height * 0.3,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    box.x + box.width * 0.58,
+    box.y + box.height * 0.28,
+    { steps: 5 },
+  );
+  await page.mouse.move(
+    box.x + box.width * 0.54,
+    box.y + box.height * 0.48,
+    { steps: 5 },
+  );
+  await page.mouse.up();
+
+  await expect(page.locator('[data-object-type="region"]')).toHaveCount(1);
+  await expect(
+    page.locator('[data-object-type="region"] [data-line-role="boundary"]'),
+  ).toHaveAttribute("data-region-closed", "true");
+});
+
+test("recolors a PSD arrow and keeps its folded shaft attached", async ({
+  page,
+}) => {
+  await page.getByRole("button", { name: "使用警戒点线线型" }).click();
+  await page.getByRole("button", { name: "箭头折线绘制模式" }).click();
+  await page.getByRole("button", { name: "箭头", exact: true }).click();
+  const canvas = page.getByTestId("map-canvas");
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("Map canvas has no layout box");
+  const points = [
+    { x: box.x + box.width * 0.28, y: box.y + box.height * 0.62 },
+    { x: box.x + box.width * 0.5, y: box.y + box.height * 0.48 },
+    { x: box.x + box.width * 0.72, y: box.y + box.height * 0.58 },
+  ];
+  await page.mouse.click(points[0].x, points[0].y);
+  await page.mouse.click(points[1].x, points[1].y);
+  await page.mouse.dblclick(points[2].x, points[2].y);
+  await page.getByLabel("箭头颜色选择器").fill("#ff00a8");
+
+  const arrow = page.locator('[data-object-type="arrow"]');
+  await expect(arrow).toHaveAttribute("data-line-style", "dotted");
+  await expect(
+    arrow.locator('[data-arrow-head-filter="line-color"] feFlood'),
+  ).toHaveAttribute("flood-color", "#ff00a8");
+  await expect(
+    arrow.locator('[data-arrow-head-connector="psd"]'),
+  ).toHaveCount(1);
+  await expect(
+    arrow.locator('[data-arrow-head-clip="psd"]'),
+  ).toHaveCount(1);
+  await expect(
+    arrow.locator('[data-arrow-shaft-clip="psd"]'),
+  ).toHaveCount(1);
+  const headSize = Number(
+    await arrow.locator("[data-arrow-head]").getAttribute("data-head-size"),
+  );
+  const [headX, headY] = (
+    (await arrow
+      .locator("[data-arrow-head]")
+      .getAttribute("data-arrow-head-point")) ?? ""
+  ).split(",").map(Number);
+  const [lineX, lineY] = (
+    (await arrow
+      .locator("[data-arrow-head]")
+      .getAttribute("data-head-base-point")) ?? ""
+  ).split(",").map(Number);
+
+  expect(
+    Math.abs(Math.hypot(headX - lineX, headY - lineY) - headSize),
+  ).toBeLessThan(0.1);
+});
+
+test("applies a ticked defense line and tapered brush", async ({ page }) => {
+  await page.getByRole("button", { name: "使用栅栏防线线型" }).click();
+  await page.getByRole("button", { name: "使用渐细笔" }).click();
+  await page.getByRole("button", { name: "箭头直接绘制模式" }).click();
+  await page.getByRole("button", { name: "箭头", exact: true }).click();
+  const canvas = page.getByTestId("map-canvas");
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("Map canvas has no layout box");
+  await page.mouse.move(box.x + box.width * 0.22, box.y + box.height * 0.7);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.76, box.y + box.height * 0.48, {
+    steps: 10,
+  });
+  await page.mouse.up();
+
+  await expect(
+    page.locator('[data-object-type="arrow"] [data-line-role="tick"]'),
+  ).toHaveCount(1);
+  await expect(page.getByLabel("箭头线宽")).toHaveValue("12");
+  await expect(page.getByLabel("线起点大小")).toHaveValue("12");
+  await expect(page.getByLabel("线终点大小")).toHaveValue("2");
+});
+
 test("places a Chinese-labelled flag from the flag asset group", async ({
   page,
 }) => {

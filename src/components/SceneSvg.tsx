@@ -1,14 +1,19 @@
-import type { PointerEvent as ReactPointerEvent } from "react";
+import {
+  useId,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 
 import { getArrowAnimationProgress } from "../model/animation";
 import { flagArtworkAssetFor } from "../model/flags";
 import { lineDashArray, normalizeLineStyle } from "../model/lineStyle";
+import { buildTickMarks } from "../model/linePattern";
 import { smoothPathData, trimPathEnd } from "../model/path";
 import {
   buildOpenOffsetPath,
   buildTaperedRibbon,
   clipSmoothPathToProgress,
   pathFrameAtProgress,
+  sampleSmoothPath,
 } from "../model/strokeGeometry";
 import { buildRegionDashArray } from "../model/regionGeometry";
 import type {
@@ -113,7 +118,9 @@ function arrowHeadConnectionLength(
   style: ArrowHeadStyle,
   size: number,
 ): number {
-  return style === "chevron" ? size * 0.56 : size;
+  if (style === "chevron") return size * 0.56;
+  if (style === "psd") return size;
+  return size;
 }
 
 function objectPoints(object: SceneObject): Point[] {
@@ -195,6 +202,10 @@ function ObjectNode({
   object: SceneObject;
   time: number | null;
 }) {
+  const arrowHeadId = useId().replace(/:/g, "");
+  const arrowHeadFilterId = `arrow-head-color-${arrowHeadId}`;
+  const arrowHeadClipId = `arrow-head-clip-${arrowHeadId}`;
+
   switch (object.type) {
     case "marker":
       return (
@@ -236,6 +247,13 @@ function ObjectNode({
           ? 1
           : getArrowAnimationProgress(object.animation, time);
       const headSize = object.headSize;
+      const effectiveEndWidth =
+        object.startWidth +
+        (object.endWidth - object.startWidth) * progress;
+      const controlWidth = Math.max(
+        object.width,
+        (object.startWidth + effectiveEndWidth) / 2,
+      );
       const headConnectionLength = arrowHeadConnectionLength(
         object.headStyle,
         headSize,
@@ -247,13 +265,10 @@ function ObjectNode({
       const lineEnd = shaft.at(-1) ?? headFrame.point;
       const headBasePoint = lineEnd;
       const headAngle = (headFrame.angle * 180) / Math.PI + 90;
-      const effectiveEndWidth =
-        object.startWidth +
-        (object.endWidth - object.startWidth) * progress;
-      const controlWidth = Math.max(
-        object.width,
-        (object.startWidth + effectiveEndWidth) / 2,
-      );
+      const shaftClipPath =
+        object.headStyle === "psd"
+          ? `url(#${arrowHeadClipId})`
+          : undefined;
       const hasVisibleShaft = shaft.length >= 2;
       const labelPoint =
         points[Math.min(points.length - 1, Math.floor(points.length / 2))] ??
@@ -272,64 +287,103 @@ function ObjectNode({
           data-path-points={points.length}
           opacity={object.opacity}
         >
-          {style === "double" ? (
-            <>
-              {[-1, 1].map((direction) => {
-                const rail = buildOpenOffsetPath(
-                  shaft,
-                  direction * Math.max(3, controlWidth * 0.5),
-                );
-                return (
-                  <path
-                    {...dashProps}
-                    data-line-end={pointMetadata(lineEnd)}
-                    data-line-role="rail"
-                    d={rail}
-                    fill="none"
-                    key={direction}
-                    stroke={object.color}
-                    strokeLinecap="butt"
-                    strokeLinejoin="miter"
-                    strokeWidth={Math.max(
-                      1.5,
-                      controlWidth * 0.19,
-                    )}
-                  />
-                );
-              })}
-            </>
-          ) : hasVisibleShaft &&
-            style === "solid" &&
-            object.startWidth !== effectiveEndWidth ? (
-            <path
-              data-line-end={pointMetadata(lineEnd)}
-              data-line-role="shaft"
-              data-width-shape="tapered"
-              d={buildTaperedRibbon(
-                shaft,
-                object.startWidth,
-                effectiveEndWidth,
-              )}
-              fill={object.color}
-              stroke="none"
-            />
-          ) : hasVisibleShaft ? (
-            <path
-              {...dashProps}
-              data-line-end={pointMetadata(lineEnd)}
-              data-line-role="shaft"
-              data-width-shape="uniform"
-              d={shaftPath}
-              fill="none"
-              stroke={object.color}
-              strokeLinecap={style === "dotted" ? "round" : "butt"}
-              strokeLinejoin="miter"
-              strokeWidth={Math.max(
-                1,
-                (object.startWidth + effectiveEndWidth) / 2,
-              )}
-            />
+          {object.headStyle === "psd" ? (
+            <defs>
+              <clipPath
+                clipPathUnits="userSpaceOnUse"
+                data-arrow-head-clip="psd"
+                id={arrowHeadClipId}
+              >
+                <rect
+                  height="200000"
+                  transform={`translate(${headFrame.point.x} ${headFrame.point.y}) rotate(${headAngle})`}
+                  width="200000"
+                  x="-100000"
+                  y={headSize - 0.25}
+                />
+              </clipPath>
+            </defs>
           ) : null}
+          <g
+            clipPath={shaftClipPath}
+            data-arrow-shaft-clip={
+              object.headStyle === "psd" ? "psd" : undefined
+            }
+          >
+            {style === "double" ? (
+              <>
+                {[-1, 1].map((direction) => {
+                  const rail = buildOpenOffsetPath(
+                    shaft,
+                    direction * Math.max(3, controlWidth * 0.5),
+                  );
+                  return (
+                    <path
+                      {...dashProps}
+                      data-line-end={pointMetadata(lineEnd)}
+                      data-line-role="rail"
+                      d={rail}
+                      fill="none"
+                      key={direction}
+                      stroke={object.color}
+                      strokeLinecap="butt"
+                      strokeLinejoin="miter"
+                      strokeWidth={Math.max(
+                        1.5,
+                        controlWidth * 0.19,
+                      )}
+                    />
+                  );
+                })}
+              </>
+            ) : hasVisibleShaft &&
+              style === "solid" &&
+              object.startWidth !== effectiveEndWidth ? (
+              <path
+                data-line-end={pointMetadata(lineEnd)}
+                data-line-role="shaft"
+                data-width-shape="tapered"
+                d={buildTaperedRibbon(
+                  shaft,
+                  object.startWidth,
+                  effectiveEndWidth,
+                )}
+                fill={object.color}
+                stroke="none"
+              />
+            ) : hasVisibleShaft ? (
+              <path
+                {...dashProps}
+                data-line-end={pointMetadata(lineEnd)}
+                data-line-role="shaft"
+                data-width-shape="uniform"
+                d={shaftPath}
+                fill="none"
+                stroke={object.color}
+                strokeLinecap={style === "dotted" ? "round" : "butt"}
+                strokeLinejoin="miter"
+                strokeWidth={Math.max(
+                  1,
+                  (object.startWidth + effectiveEndWidth) / 2,
+                )}
+              />
+            ) : null}
+            {style === "ticked" && hasVisibleShaft ? (
+              <path
+                data-line-role="tick"
+                d={buildTickMarks(
+                  shaft,
+                  Math.max(14, controlWidth * 2.4),
+                  Math.max(8, controlWidth * 1.8),
+                )}
+                fill="none"
+                stroke={object.color}
+                strokeLinecap="butt"
+                strokeLinejoin="miter"
+                strokeWidth={Math.max(1.5, controlWidth * 0.32)}
+              />
+            ) : null}
+          </g>
           <g
             data-arrow-head="true"
             data-arrow-head-point={pointMetadata(headFrame.point)}
@@ -341,14 +395,42 @@ function ObjectNode({
             transform={`translate(${headFrame.point.x} ${headFrame.point.y}) rotate(${headAngle})`}
           >
             {object.headStyle === "psd" ? (
-              <image
-                height={headSize}
-                href={arrowHeadAssetForTint(object.tint)}
-                preserveAspectRatio="xMidYMid meet"
-                width={headSize}
-                x={-headSize / 2}
-                y={0}
-              />
+              <>
+                <defs>
+                  <filter
+                    data-arrow-head-filter="line-color"
+                    id={arrowHeadFilterId}
+                  >
+                    <feFlood floodColor={object.color} />
+                    <feComposite
+                      in2="SourceAlpha"
+                      operator="in"
+                    />
+                  </filter>
+                </defs>
+                <rect
+                  data-arrow-head-connector="psd"
+                  fill={object.color}
+                  height={
+                    headConnectionLength +
+                    Math.max(2, controlWidth * 0.5) -
+                    headSize * 0.86
+                  }
+                  width={Math.max(1, controlWidth)}
+                  x={-Math.max(1, controlWidth) / 2}
+                  y={headSize * 0.86}
+                />
+                <image
+                  data-arrow-head-image="psd"
+                  filter={`url(#${arrowHeadFilterId})`}
+                  height={headSize}
+                  href={arrowHeadAssetForTint(object.tint)}
+                  preserveAspectRatio="xMidYMid meet"
+                  width={headSize}
+                  x={-headSize / 2}
+                  y={0}
+                />
+              </>
             ) : (
               <path
                 data-arrow-head-fill="true"
@@ -470,6 +552,7 @@ function ObjectNode({
         const controlWidth = Math.max(object.strokeWidth, averageWidth);
         const dash = lineDashArray(style, averageWidth);
         const path = smoothPathData(object.points);
+        const sampledPath = sampleSmoothPath(object.points);
       return (
         <g
           data-line-style={style}
@@ -521,6 +604,21 @@ function ObjectNode({
               strokeWidth={Math.max(1, averageWidth)}
             />
           )}
+          {style === "ticked" ? (
+            <path
+              data-line-role="tick"
+              d={buildTickMarks(
+                sampledPath,
+                Math.max(12, controlWidth * 2.2),
+                Math.max(7, controlWidth * 1.6),
+              )}
+              fill="none"
+              stroke={object.color}
+              strokeLinecap="butt"
+              strokeLinejoin="miter"
+              strokeWidth={Math.max(1.5, controlWidth * 0.28)}
+            />
+          ) : null}
         </g>
       );
       }

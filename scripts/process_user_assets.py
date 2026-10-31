@@ -160,10 +160,44 @@ def write_raw_badges() -> None:
             dtype=np.uint8,
         )
         alpha = source[..., 3]
-        outside = alpha < 24
-        source[outside, :3] = 0
-        alpha[outside] = 0
+        mask = (alpha >= 24).astype(np.uint8) * 255
+        contours, _ = cv2.findContours(
+            mask,
+            cv2.RETR_EXTERNAL,
+            cv2.CHAIN_APPROX_NONE,
+        )
+        if contours:
+            outer = np.zeros_like(mask)
+            cv2.drawContours(
+                outer,
+                [max(contours, key=cv2.contourArea)],
+                -1,
+                255,
+                cv2.FILLED,
+            )
+            kernel = cv2.getStructuringElement(
+                cv2.MORPH_ELLIPSE,
+                (9, 9),
+            )
+            edge_band = (
+                cv2.dilate(outer, kernel) - cv2.erode(outer, kernel)
+            )
+            softened = cv2.GaussianBlur(
+                alpha.astype(np.float32),
+                (0, 0),
+                2.0,
+            )
+            alpha = np.where(
+                edge_band > 0,
+                softened,
+                alpha.astype(np.float32),
+            )
+            alpha[alpha < 3] = 0
+            alpha = alpha.clip(0, 255).astype(np.uint8)
+
+        transparent = alpha == 0
         source[..., 3] = alpha
+        source[transparent, :3] = 0
         Image.fromarray(source, "RGBA").save(
             CUSTOM_OUTPUT / f"{artwork_name}.png"
         )
@@ -174,7 +208,7 @@ def main() -> None:
     write_raw_badges()
     write_flags()
     print("Processed 2 badge sources into 6 tinted PNGs.")
-    print("Processed 1 original-color badge with fringe cleanup.")
+    print("Processed 1 original-color badge with edge smoothing.")
     print("Extracted 47 country flags.")
 
 

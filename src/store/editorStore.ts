@@ -7,6 +7,14 @@ import {
   normalizeStrokeWidth,
 } from "../model/project";
 import { normalizeFlagAttachment } from "../model/flags";
+import {
+  DEFAULT_BRUSH_PRESET_ID,
+  brushPresetFor,
+} from "../model/brushes";
+import type {
+  BrushPresetId,
+  SketchMode,
+} from "../model/types";
 import type { Viewport } from "../model/geometry";
 import type {
   AtlasProject,
@@ -24,6 +32,32 @@ import type {
 
 const HISTORY_LIMIT = 50;
 const STROKE_DAMPING_KEY = "tactical-atlas:stroke-damping";
+const ARROW_DRAW_MODE_KEY = "tactical-atlas:arrow-draw-mode";
+const REGION_DRAW_MODE_KEY = "tactical-atlas:region-draw-mode";
+const ACTIVE_BRUSH_KEY = "tactical-atlas:active-brush";
+
+function readSketchMode(key: string, fallback: SketchMode): SketchMode {
+  if (typeof localStorage === "undefined") return fallback;
+  try {
+    const saved = localStorage.getItem(key);
+    return saved === "direct" || saved === "polyline" ? saved : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function readBrushPreset(): BrushPresetId {
+  if (typeof localStorage === "undefined") return DEFAULT_BRUSH_PRESET_ID;
+  try {
+    const saved = localStorage.getItem(ACTIVE_BRUSH_KEY);
+    return saved &&
+      ["command", "drafting", "advance", "taper"].includes(saved)
+      ? (saved as BrushPresetId)
+      : DEFAULT_BRUSH_PRESET_ID;
+  } catch {
+    return DEFAULT_BRUSH_PRESET_ID;
+  }
+}
 
 function readStrokeDamping(): number {
   if (typeof localStorage === "undefined") return 0.58;
@@ -48,6 +82,9 @@ export type EditorState = {
   activeArtwork: MarkerArtworkId;
   activeArtworkSource: UnitArtworkSource;
   activeLineStyle: LineStyle;
+  arrowDrawMode: SketchMode;
+  regionDrawMode: SketchMode;
+  activeBrush: BrushPresetId;
   strokeDamping: number;
   tool: EditorTool;
   viewport: Viewport;
@@ -62,6 +99,9 @@ export type EditorState = {
   setActiveArtwork: (artwork: MarkerArtworkId) => void;
   setActiveArtworkSource: (source: UnitArtworkSource) => void;
   setActiveLineStyle: (lineStyle: LineStyle) => void;
+  setArrowDrawMode: (mode: SketchMode) => void;
+  setRegionDrawMode: (mode: SketchMode) => void;
+  setActiveBrush: (brush: BrushPresetId) => void;
   setStrokeDamping: (strength: number) => void;
   createNewProject: (title?: string) => void;
   loadProject: (project: AtlasProject) => void;
@@ -132,6 +172,9 @@ export const useEditorStore = create<EditorState>((set, get) => {
     activeArtwork: "friendly-tank",
     activeArtworkSource: "psd",
     activeLineStyle: "solid",
+    arrowDrawMode: readSketchMode(ARROW_DRAW_MODE_KEY, "direct"),
+    regionDrawMode: readSketchMode(REGION_DRAW_MODE_KEY, "polyline"),
+    activeBrush: readBrushPreset(),
     strokeDamping: readStrokeDamping(),
     tool: "select",
     viewport: { x: 0, y: 0, scale: 1 },
@@ -148,6 +191,31 @@ export const useEditorStore = create<EditorState>((set, get) => {
     setActiveArtworkSource: (activeArtworkSource) =>
       set({ activeArtworkSource }),
     setActiveLineStyle: (activeLineStyle) => set({ activeLineStyle }),
+    setArrowDrawMode: (arrowDrawMode) => {
+      try {
+        localStorage.setItem(ARROW_DRAW_MODE_KEY, arrowDrawMode);
+      } catch {
+        // Editing remains available when browser storage is unavailable.
+      }
+      set({ arrowDrawMode });
+    },
+    setRegionDrawMode: (regionDrawMode) => {
+      try {
+        localStorage.setItem(REGION_DRAW_MODE_KEY, regionDrawMode);
+      } catch {
+        // Editing remains available when browser storage is unavailable.
+      }
+      set({ regionDrawMode });
+    },
+    setActiveBrush: (activeBrush) => {
+      const normalized = brushPresetFor(activeBrush).id;
+      try {
+        localStorage.setItem(ACTIVE_BRUSH_KEY, normalized);
+      } catch {
+        // Editing remains available when browser storage is unavailable.
+      }
+      set({ activeBrush: normalized });
+    },
     setStrokeDamping: (strength) => {
       const strokeDamping = Math.min(1, Math.max(0, strength));
       try {
