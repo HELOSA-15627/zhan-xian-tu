@@ -127,6 +127,7 @@ export type MarkerObject = BaseObject & {
   rotation: number;
   opacity: number;
   color: string;
+  strokeEnabled: boolean;
   symbol: TacticalSymbol;
   affiliation: UnitAffiliation;
   artwork: MarkerArtworkId;
@@ -212,6 +213,7 @@ export type SceneObjectPatch = {
   rotation?: number;
   opacity?: number;
   color?: string;
+  strokeEnabled?: boolean;
   symbol?: TacticalSymbol;
   affiliation?: UnitAffiliation;
   artwork?: MarkerArtworkId;
@@ -240,11 +242,22 @@ export type SceneObjectPatch = {
   strokeWidth?: number;
   text?: string;
   fontSize?: number;
-  strokeEnabled?: boolean;
 };
 
 export type BackgroundSettings = {
   dataUrl: string | null;
+  opacity: number;
+  grayscale: number;
+  contrast: number;
+  brightness: number;
+};
+
+export type ImportedMap = {
+  id: string;
+  name: string;
+  dataUrl: string;
+  width: number;
+  height: number;
   opacity: number;
   grayscale: number;
   contrast: number;
@@ -259,6 +272,8 @@ export type AtlasProject = {
   height: number;
   updatedAt: string;
   background: BackgroundSettings;
+  maps: ImportedMap[];
+  activeMapId: string | null;
   layers: Layer[];
   objects: SceneObject[];
 };

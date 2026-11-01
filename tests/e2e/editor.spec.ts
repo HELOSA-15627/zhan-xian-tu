@@ -29,6 +29,37 @@ test("imports a custom basemap", async ({ page }) => {
   await expect(page.getByText("northline", { exact: true })).toBeVisible();
 });
 
+test("lists, selects and edits imported maps", async ({ page }) => {
+  const input = page.locator(
+    'input[type="file"][accept*="image/png"]',
+  );
+  await input.setInputFiles({
+    name: "northline.png",
+    mimeType: "image/png",
+    buffer: ONE_PIXEL_PNG,
+  });
+  await input.setInputFiles({
+    name: "southline.png",
+    mimeType: "image/png",
+    buffer: ONE_PIXEL_PNG,
+  });
+
+  await page.getByRole("tab", { name: "地图" }).click();
+  const north = page.getByRole("button", { name: "选取地图 northline" });
+  const south = page.getByRole("button", { name: "选取地图 southline" });
+  await expect(north).toBeVisible();
+  await expect(south).toHaveAttribute("aria-pressed", "true");
+
+  await north.click();
+  await expect(north).toHaveAttribute("aria-pressed", "true");
+  await page.getByLabel("地图名称").fill("北线主轴");
+  await page.getByLabel("地图名称").press("Enter");
+  await page.getByLabel("地图不透明度").fill("0.55");
+  await expect(
+    page.getByRole("button", { name: "选取地图 北线主轴" }),
+  ).toBeVisible();
+});
+
 test("draws and exports a tactical map", async ({ page }) => {
   await page.getByRole("button", { name: "PSD 兵牌 装甲" }).click();
   const canvas = page.getByTestId("map-canvas");
@@ -119,6 +150,42 @@ test("applies the reference unit and line language", async ({ page }) => {
   expect(railPaths.every((path) => !path.includes("Z"))).toBe(true);
 });
 
+test("toggles the outline on a placed unit badge", async ({ page }) => {
+  await page.getByRole("button", { name: "PSD 兵牌 装甲" }).click();
+  const canvas = page.getByTestId("map-canvas");
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("Map canvas has no layout box");
+  await page.mouse.click(box.x + box.width * 0.4, box.y + box.height * 0.4);
+
+  const outline = page.locator(
+    '.scene-svg [data-object-type="marker"] [data-artwork-layer="outline"]',
+  );
+  await expect(outline).toHaveCount(1);
+  await page.getByLabel("启用兵牌描边").uncheck();
+  await expect(outline).toHaveCount(0);
+  await page.getByLabel("启用兵牌描边").check();
+  await expect(outline).toHaveCount(1);
+});
+
+test("hides one layer without hiding the rest of the project", async ({
+  page,
+}) => {
+  await page.getByRole("button", { name: "PSD 兵牌 装甲" }).click();
+  const canvas = page.getByTestId("map-canvas");
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("Map canvas has no layout box");
+  await page.mouse.click(box.x + box.width * 0.42, box.y + box.height * 0.42);
+
+  await page.getByRole("tab", { name: "图层" }).click();
+  const visibility = page.getByRole("checkbox", { name: /显示图层/ });
+  await visibility.uncheck();
+  await expect(page.getByText("已隐藏")).toBeVisible();
+  await expect(page.locator('[data-object-type="marker"]')).toHaveCount(0);
+
+  await visibility.check();
+  await expect(page.locator('[data-object-type="marker"]')).toHaveCount(1);
+});
+
 test("draws NATO badges and natural multi-direction arrows", async ({
   page,
 }) => {
@@ -153,7 +220,7 @@ test("draws NATO badges and natural multi-direction arrows", async ({
     page.locator(
       '.scene-svg [data-symbol-style="nato"] [data-artwork-layer="outline"]',
     ),
-  ).toHaveCount(0);
+  ).toHaveCount(1);
   await expect(
     page.locator(
       '.scene-svg [data-symbol-style="nato"] [data-artwork-layer="fill"]',

@@ -64,6 +64,8 @@ export function createBlankProject(title = "未命名战役"): AtlasProject {
       contrast: 1,
       brightness: 1,
     },
+    maps: [],
+    activeMapId: null,
     layers: [layer],
     objects: [],
   };
@@ -98,6 +100,7 @@ export function createMarker(
     rotation: 0,
     opacity: 1,
     color: options.color ?? AFFILIATION_COLORS[affiliation],
+    strokeEnabled: true,
     symbol,
     affiliation,
     artwork,

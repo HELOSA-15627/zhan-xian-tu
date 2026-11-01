@@ -1,5 +1,6 @@
 import type {
   AtlasProject,
+  ImportedMap,
   Layer,
   SceneObject,
 } from "../model/types";
@@ -81,6 +82,21 @@ function isLayer(value: unknown): value is Layer {
   );
 }
 
+function isImportedMap(value: unknown): value is ImportedMap {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.name === "string" &&
+    typeof value.dataUrl === "string" &&
+    typeof value.width === "number" &&
+    typeof value.height === "number" &&
+    typeof value.opacity === "number" &&
+    typeof value.grayscale === "number" &&
+    typeof value.contrast === "number" &&
+    typeof value.brightness === "number"
+  );
+}
+
 function normalizeScale(value: unknown): number {
   return Math.min(
     20,
@@ -150,6 +166,11 @@ function validateProject(value: unknown): AtlasProject {
     typeof value.height !== "number" ||
     typeof value.updatedAt !== "string" ||
     !isRecord(value.background) ||
+    (value.maps !== undefined &&
+      (!Array.isArray(value.maps) || !value.maps.every(isImportedMap))) ||
+    (value.activeMapId !== undefined &&
+      value.activeMapId !== null &&
+      typeof value.activeMapId !== "string") ||
     !Array.isArray(value.layers) ||
     !value.layers.every(isLayer) ||
     !Array.isArray(value.objects) ||
@@ -159,8 +180,42 @@ function validateProject(value: unknown): AtlasProject {
   }
 
   const project = value as AtlasProject;
+  const maps =
+    Array.isArray(project.maps) && project.maps.length > 0
+      ? structuredClone(project.maps)
+      : project.background.dataUrl
+        ? [
+            {
+              id: `map-${project.id}`,
+              name: project.title,
+              dataUrl: project.background.dataUrl,
+              width: project.width,
+              height: project.height,
+              opacity: project.background.opacity,
+              grayscale: project.background.grayscale,
+              contrast: project.background.contrast,
+              brightness: project.background.brightness,
+            },
+          ]
+        : [];
+  const activeMapId =
+    maps.find((map) => map.id === project.activeMapId)?.id ??
+    maps.at(-1)?.id ??
+    null;
+  const activeMap = maps.find((map) => map.id === activeMapId);
   return {
     ...project,
+    maps,
+    activeMapId,
+    background: activeMap
+      ? {
+          dataUrl: activeMap.dataUrl,
+          opacity: activeMap.opacity,
+          grayscale: activeMap.grayscale,
+          contrast: activeMap.contrast,
+          brightness: activeMap.brightness,
+        }
+      : project.background,
     objects: project.objects.map((object) => {
       if (object.type === "marker") {
         const next = structuredClone(object);
@@ -203,6 +258,7 @@ function validateProject(value: unknown): AtlasProject {
           1,
           Math.max(0, typeof next.opacity === "number" ? next.opacity : 1),
         );
+        next.strokeEnabled = next.strokeEnabled !== false;
         next.scaleX = normalizeScale(next.scaleX);
         next.scaleY = normalizeScale(next.scaleY);
         next.flagAttachment = normalizeFlagAttachment(next.flagAttachment);

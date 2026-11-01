@@ -19,7 +19,7 @@
 - 支持导入 PNG、JPG、JPEG、WebP。
 - 导入后自动适配当前视口。
 - 支持底图透明度、灰度、对比度和亮度调整。
-- 支持替换底图，不改变已有标注。
+- 已导入地图保存在项目地图列表中，可查看、选取、改名并分别编辑显示参数；选取后恢复该地图尺寸，且不改变已有标注。
 
 ### 3.2 绘图
 
@@ -157,6 +157,7 @@
 - PSD 原画素材保持绘制时的剪影、目标框和箭头结构，不额外套兵牌框。
 - NATO 兵科兵牌作为独立素材组导入：友军矩形、敌军菱形，不改变 PSD 素材结构。
 - PSD 原画兵牌使用黑色主体外轮廓；NATO 阵营底色保持完全不透明，内部黑色兵科符号使用素材自身颜色。
+- PSD 与 NATO 兵牌默认启用主体描边，可按兵牌单独关闭；国旗和原图巢穴保持自身素材结构。
 - 地图底部 47 面国家国旗作为独立素材组导入，保留原始颜色和比例；素材库使用中文国名，放置时不自动生成批注。
 - 素材库支持按中文或英文名称统一搜索 PSD、NATO 兵牌和国旗。
 - 箭头使用宽色带轴线、折线或双轨防线；自由手绘共享推进带、计划虚线、防线双轨、警戒点线、阶段线、边界点划和栅栏防线。
@@ -278,6 +279,7 @@ type SceneObject =
       rotation: number;
       opacity: number;
       color: string;
+      strokeEnabled: boolean;
       symbol: TacticalSymbol;
       affiliation: UnitAffiliation;
       artwork: UnitArtworkId | NatoArtworkId;
@@ -354,6 +356,18 @@ type SceneObject =
 ### 7.4 保存格式
 
 ```ts
+type ImportedMap = {
+  id: string;
+  name: string;
+  dataUrl: string;
+  width: number;
+  height: number;
+  opacity: number;
+  grayscale: number;
+  contrast: number;
+  brightness: number;
+};
+
 type AtlasProject = {
   version: 1;
   id: string;
@@ -368,6 +382,8 @@ type AtlasProject = {
     contrast: number;
     brightness: number;
   };
+  maps: ImportedMap[];
+  activeMapId: string | null;
   layers: Layer[];
   objects: SceneObject[];
 };
@@ -386,6 +402,7 @@ type AtlasProject = {
 
 - 能在 1440x900 和 1024x768 桌面视口正常使用。
 - 拖入一张 1600x900 PNG 后，底图和画布尺寸正确更新。
+- 连续导入多张地图后可在地图列表查看缩略图、选取活动地图、修改名称和显示参数。
 - 能绘制至少 8 类图标、箭头、区域、文字和手绘线。
 - 箭头播放时从起点到终点逐步出现，拖动时间线可改变进度。
 - 动画播放时箭头随路径头部移动并保持可见，线杆与箭头底边不留缝隙或重叠。
@@ -394,6 +411,8 @@ type AtlasProject = {
 - 四角手柄可分别改变对象水平轴与垂直轴尺寸，拖动角保持对角固定。
 - 变宽线可设置首尾宽度；双轨线保持两条独立开放路径且没有额外描边。
 - 兵牌默认 100% 不透明，可通过属性面板调整完整兵牌组的透明度。
+- PSD 与 NATO 兵牌描边默认开启，可按对象关闭；关闭后仍保留主体样式。
+- 任一图层可单独隐藏或恢复显示，不影响其他图层。
 - 区域边界为实心直线、尖角和零节点圆点；锁定后可拖动，解锁后可插入节点。
 - 区域可在四种形状预设间切换，并可应用实线、虚线或点线边界。
 - 虚线或点线区域的段数可通过滑块调整，边界周长变化后自动重新计算段长。

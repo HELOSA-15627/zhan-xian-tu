@@ -6,6 +6,7 @@ import { AssetLibrary } from "./components/AssetLibrary";
 import { Inspector } from "./components/Inspector";
 import { LayerPanel } from "./components/LayerPanel";
 import { MapCanvas } from "./components/MapCanvas";
+import { MapPanel } from "./components/MapPanel";
 import { Timeline } from "./components/Timeline";
 import { ToolRail } from "./components/ToolRail";
 import { TopBar } from "./components/TopBar";
@@ -24,7 +25,7 @@ import {
 } from "./persistence/projectRepository";
 import { useEditorStore } from "./store/editorStore";
 
-type LeftTab = "symbols" | "layers";
+type LeftTab = "symbols" | "layers" | "maps";
 
 function fileTitle(filename: string): string {
   return filename.replace(/\.[^.]+$/, "") || "未命名战役";
@@ -34,9 +35,6 @@ function App() {
   const project = useEditorStore((state) => state.project);
   const loadProject = useEditorStore((state) => state.loadProject);
   const applyBackground = useEditorStore((state) => state.applyBackground);
-  const updateProjectTitle = useEditorStore(
-    (state) => state.updateProjectTitle,
-  );
   const tool = useEditorStore((state) => state.tool);
   const setTool = useEditorStore((state) => state.setTool);
   const undo = useEditorStore((state) => state.undo);
@@ -209,8 +207,12 @@ function App() {
       validateImageFile(file);
       const dataUrl = await readFileAsDataUrl(file);
       const size = await readImageSize(dataUrl);
-      applyBackground(dataUrl, size.width, size.height);
-      updateProjectTitle(fileTitle(file.name));
+      applyBackground(
+        dataUrl,
+        size.width,
+        size.height,
+        fileTitle(file.name),
+      );
       setShowWelcome(false);
       setNotice("底图已导入");
     } catch (error) {
@@ -293,8 +295,23 @@ function App() {
           >
             图层
           </button>
+          <button
+            aria-selected={leftTab === "maps"}
+            className="panel-tab"
+            onClick={() => setLeftTab("maps")}
+            role="tab"
+            type="button"
+          >
+            地图
+          </button>
         </div>
-        {leftTab === "symbols" ? <AssetLibrary /> : <LayerPanel />}
+        {leftTab === "symbols" ? (
+          <AssetLibrary />
+        ) : leftTab === "layers" ? (
+          <LayerPanel />
+        ) : (
+          <MapPanel />
+        )}
       </aside>
       <main
         aria-label="战术地图编辑器"

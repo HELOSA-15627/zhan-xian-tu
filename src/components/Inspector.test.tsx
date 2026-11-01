@@ -65,6 +65,26 @@ describe("inspector", () => {
     });
   });
 
+  it("toggles marker outlines on by default", async () => {
+    const store = useEditorStore.getState();
+    const marker = createMarker(store.project.layers[0].id, {
+      x: 20,
+      y: 20,
+    });
+    store.addObject(marker);
+    store.setSelection([marker.id]);
+    render(<Inspector />);
+
+    const toggle = screen.getByLabelText("启用兵牌描边");
+    expect(toggle).toBeChecked();
+    await userEvent.click(toggle);
+
+    expect(useEditorStore.getState().project.objects[0]).toMatchObject({
+      type: "marker",
+      strokeEnabled: false,
+    });
+  });
+
   it("shows flag artwork with its Chinese country label", () => {
     const store = useEditorStore.getState();
     const marker = createMarker(

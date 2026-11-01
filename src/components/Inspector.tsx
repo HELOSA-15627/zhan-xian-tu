@@ -367,6 +367,21 @@ function markerFields(
           {Math.round(object.opacity * 100)}%
         </output>
       </Field>
+      {object.artworkSource === "psd" ||
+      object.artworkSource === "nato" ? (
+        <label className="check-field">
+          <input
+            aria-label="启用兵牌描边"
+            checked={object.strokeEnabled}
+            name="marker-stroke-enabled"
+            onChange={(event) =>
+              update({ strokeEnabled: event.target.checked })
+            }
+            type="checkbox"
+          />
+          启用兵牌描边
+        </label>
+      ) : null}
       <Field label="旋转角度">
         <NumberInput
           label="图标旋转角度"
@@ -891,9 +906,9 @@ export function Inspector() {
             {project.width} × {project.height}
           </span>
         </div>
-        <Field label="地图名称">
+        <Field label="项目名称">
           <input
-            aria-label="地图名称"
+            aria-label="项目名称"
             autoComplete="off"
             name="map-title"
             onChange={(event) => updateProjectTitle(event.target.value)}

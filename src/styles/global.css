@@ -661,6 +661,65 @@ textarea:focus-visible {
   gap: 8px;
 }
 
+.map-list {
+  display: grid;
+  gap: 8px;
+}
+
+.map-list-item {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  background: #11151d;
+  text-align: left;
+}
+
+.map-list-item.is-active {
+  border-color: rgb(227 49 141 / 65%);
+  box-shadow: inset 2px 0 0 var(--signal);
+}
+
+.map-list-thumbnail {
+  width: 74px;
+  height: 44px;
+  border: 1px solid rgb(255 255 255 / 16%);
+  object-fit: cover;
+  background: var(--paper);
+}
+
+.map-list-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.map-list-copy strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-list-copy small {
+  color: var(--muted);
+  font-family: var(--font-data);
+  font-size: 10px;
+}
+
+.map-editor {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
 .layer-group {
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
@@ -670,6 +729,18 @@ textarea:focus-visible {
 .layer-group.is-active {
   border-color: rgb(227 49 141 / 52%);
   box-shadow: inset 2px 0 0 var(--signal);
+}
+
+.layer-group.is-hidden {
+  background: #0d1117;
+}
+
+.layer-group.is-hidden .object-list {
+  opacity: 0.52;
+}
+
+.layer-name .layer-hidden-state {
+  color: var(--warning);
 }
 
 .layer-row {

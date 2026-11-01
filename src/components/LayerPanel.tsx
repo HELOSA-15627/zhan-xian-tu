@@ -58,7 +58,8 @@ export function LayerPanel() {
             <div
               className={`layer-group ${
                 activeLayerId === layer.id ? "is-active" : ""
-              }`}
+              } ${layer.visible ? "" : "is-hidden"}`}
+              data-layer-visible={layer.visible}
               key={layer.id}
             >
               <div className="layer-row">
@@ -75,6 +76,9 @@ export function LayerPanel() {
                 >
                   {layer.name}
                   <span>{objects.length}</span>
+                  {!layer.visible ? (
+                    <span className="layer-hidden-state">已隐藏</span>
+                  ) : null}
                 </button>
                 <button
                   aria-label={`${layer.visible ? "隐藏" : "显示"}图层 ${
@@ -82,6 +86,7 @@ export function LayerPanel() {
                   }`}
                   className="icon-button"
                   onClick={() => toggleLayer(layer.id)}
+                  title={layer.visible ? "隐藏此图层" : "显示此图层"}
                   type="button"
                 >
                   {layer.visible ? (

@@ -122,4 +122,38 @@ describe("editor store", () => {
       },
     });
   });
+
+  it("keeps imported maps in a selectable list", () => {
+    const store = useEditorStore.getState();
+    store.applyBackground(
+      "data:image/png;base64,AAAA",
+      1200,
+      800,
+      "北线地图",
+    );
+    const firstId = useEditorStore.getState().project.activeMapId;
+    store.applyBackground(
+      "data:image/png;base64,BBBB",
+      800,
+      600,
+      "南线地图",
+    );
+
+    expect(useEditorStore.getState().project.maps).toHaveLength(2);
+    expect(useEditorStore.getState().project).toMatchObject({
+      width: 800,
+      height: 600,
+      background: { dataUrl: "data:image/png;base64,BBBB" },
+    });
+
+    if (!firstId) throw new Error("First map was not activated");
+    useEditorStore.getState().selectMap(firstId);
+
+    expect(useEditorStore.getState().project).toMatchObject({
+      width: 1200,
+      height: 800,
+      activeMapId: firstId,
+      background: { dataUrl: "data:image/png;base64,AAAA" },
+    });
+  });
 });

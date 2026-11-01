@@ -75,6 +75,27 @@ describe("tactical symbol", () => {
     ).toHaveAttribute("flood-color", "#000000");
   });
 
+  it("can hide the badge outline without hiding its fill", () => {
+    const { container } = render(
+      <TacticalSymbol
+        affiliation="friendly"
+        artwork="friendly-tank"
+        artworkSource="psd"
+        color="#92cf00"
+        size={88}
+        strokeEnabled={false}
+        symbol="friendly"
+      />,
+    );
+
+    expect(
+      container.querySelector('[data-artwork-layer="outline"]'),
+    ).not.toBeInTheDocument();
+    expect(
+      container.querySelector('[data-artwork-layer="fill"]'),
+    ).toBeInTheDocument();
+  });
+
   it("renders imported NATO symbols as their own asset group", () => {
     const { container } = render(
       <TacticalSymbol
@@ -95,7 +116,7 @@ describe("tactical symbol", () => {
     ).toHaveAttribute("data-unit-artwork", "nato-armor");
     expect(
       container.querySelector('[data-artwork-layer="outline"]'),
-    ).not.toBeInTheDocument();
+    ).toBeInTheDocument();
   });
 
   it("renders country flags without tint or badge outlines", () => {

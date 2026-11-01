@@ -20,6 +20,7 @@ import type {
   AtlasProject,
   BackgroundSettings,
   EditorTool,
+  ImportedMap,
   Layer,
   LineStyle,
   MarkerArtworkId,
@@ -107,7 +108,14 @@ export type EditorState = {
   loadProject: (project: AtlasProject) => void;
   updateProjectTitle: (title: string) => void;
   updateBackground: (patch: Partial<BackgroundSettings>) => void;
-  applyBackground: (dataUrl: string, width: number, height: number) => void;
+  applyBackground: (
+    dataUrl: string,
+    width: number,
+    height: number,
+    name?: string,
+  ) => void;
+  selectMap: (mapId: string) => void;
+  renameMap: (mapId: string, name: string) => void;
   addObject: (object: SceneObject) => void;
   updateObject: (id: string, patch: SceneObjectPatch) => void;
   removeObject: (id: string) => void;
@@ -267,18 +275,72 @@ export const useEditorStore = create<EditorState>((set, get) => {
     updateBackground: (patch) => {
       const next = cloneProject(get().project);
       next.background = { ...next.background, ...patch };
+      const activeMap = next.maps.find(
+        (map) => map.id === next.activeMapId,
+      );
+      if (activeMap) {
+        Object.assign(activeMap, patch);
+      }
       commitProject(next);
     },
 
-    applyBackground: (dataUrl, width, height) => {
+    applyBackground: (dataUrl, width, height, name) => {
       const next = cloneProject(get().project);
+      const mapName =
+        name?.trim() || `导入地图 ${next.maps.length + 1}`;
+      const map: ImportedMap = {
+        id: `map-${crypto.randomUUID()}`,
+        name: mapName,
+        dataUrl,
+        width,
+        height,
+        opacity: 1,
+        grayscale: 0,
+        contrast: 1,
+        brightness: 1,
+      };
+      const firstMap = next.maps.length === 0;
       next.width = width;
       next.height = height;
       next.background = {
-        ...next.background,
+        opacity: map.opacity,
+        grayscale: map.grayscale,
+        contrast: map.contrast,
+        brightness: map.brightness,
         dataUrl,
-        opacity: 1,
       };
+      next.maps.push(map);
+      next.activeMapId = map.id;
+      if (firstMap && name?.trim()) {
+        next.title = name.trim();
+      }
+      commitProject(next);
+    },
+
+    selectMap: (mapId) => {
+      const next = cloneProject(get().project);
+      const map = next.maps.find((item) => item.id === mapId);
+      if (!map || next.activeMapId === mapId) return;
+      next.activeMapId = map.id;
+      next.width = map.width;
+      next.height = map.height;
+      next.background = {
+        dataUrl: map.dataUrl,
+        opacity: map.opacity,
+        grayscale: map.grayscale,
+        contrast: map.contrast,
+        brightness: map.brightness,
+      };
+      commitProject(next);
+    },
+
+    renameMap: (mapId, name) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      const next = cloneProject(get().project);
+      const map = next.maps.find((item) => item.id === mapId);
+      if (!map || map.name === trimmed) return;
+      map.name = trimmed;
       commitProject(next);
     },
 

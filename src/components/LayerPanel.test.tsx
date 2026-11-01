@@ -12,13 +12,17 @@ describe("layer panel", () => {
   });
 
   it("toggles layer visibility", async () => {
-    render(<LayerPanel />);
+    const { container } = render(<LayerPanel />);
 
     await userEvent.click(
       screen.getByRole("checkbox", { name: /显示图层/ }),
     );
 
     expect(useEditorStore.getState().project.layers[0].visible).toBe(false);
+    expect(
+      container.querySelector('[data-layer-visible="false"]'),
+    ).toBeInTheDocument();
+    expect(screen.getByText("已隐藏")).toBeInTheDocument();
   });
 
   it("lists objects on their layer", () => {

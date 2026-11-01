@@ -203,6 +203,7 @@ function ObjectNode({
               artworkSource={object.artworkSource}
               color={object.color}
               size={object.size}
+              strokeEnabled={object.strokeEnabled}
               symbol={object.symbol}
             />
           </g>

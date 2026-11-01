@@ -27,6 +27,7 @@ type TacticalSymbolProps = {
   affiliation?: UnitAffiliation;
   artwork?: MarkerArtworkId;
   artworkSource?: UnitArtworkSource;
+  strokeEnabled?: boolean;
 };
 
 export function TacticalSymbol({
@@ -36,6 +37,7 @@ export function TacticalSymbol({
   affiliation: requestedAffiliation,
   artwork: requestedArtwork,
   artworkSource: requestedArtworkSource,
+  strokeEnabled = true,
 }: TacticalSymbolProps) {
   const filterId = `artwork-tint-${useId().replace(/:/g, "")}`;
   const outlineFilterId = `artwork-outline-${useId().replace(/:/g, "")}`;
@@ -85,33 +87,35 @@ export function TacticalSymbol({
     >
       <defs>
         {artworkSource === "psd" ? (
-          <>
-            <filter id={filterId}>
-              <feFlood floodColor={tint} />
-              <feComposite in2="SourceAlpha" operator="in" />
-            </filter>
-            <filter
-              data-outline-filter="psd-black"
-              id={outlineFilterId}
-            >
-              <feMorphology
-                in="SourceAlpha"
-                operator="dilate"
-                radius="1.35"
-                result="expanded"
-              />
-              <feFlood floodColor="#000000" result="black" />
-              <feComposite
-                in="black"
-                in2="expanded"
-                operator="in"
-                result="outline"
-              />
-            </filter>
-          </>
+          <filter id={filterId}>
+            <feFlood floodColor={tint} />
+            <feComposite in2="SourceAlpha" operator="in" />
+          </filter>
+        ) : null}
+        {(artworkSource === "psd" || artworkSource === "nato") &&
+        strokeEnabled ? (
+          <filter
+            data-outline-filter="psd-black"
+            id={outlineFilterId}
+          >
+            <feMorphology
+              in="SourceAlpha"
+              operator="dilate"
+              radius="1.35"
+              result="expanded"
+            />
+            <feFlood floodColor="#000000" result="black" />
+            <feComposite
+              in="black"
+              in2="expanded"
+              operator="in"
+              result="outline"
+            />
+          </filter>
         ) : null}
       </defs>
-      {artworkSource === "psd" ? (
+      {(artworkSource === "psd" || artworkSource === "nato") &&
+      strokeEnabled ? (
         <image
           data-artwork-layer="outline"
           data-artwork-outline="psd-black"

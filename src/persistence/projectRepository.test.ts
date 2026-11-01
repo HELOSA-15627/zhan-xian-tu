@@ -45,6 +45,71 @@ describe("project repository", () => {
     expect(parseProjectFile(text)).toEqual(project);
   });
 
+  it("round-trips imported maps and upgrades a legacy single background", () => {
+    const project = createBlankProject("地图列表");
+    project.maps = [
+      {
+        id: "map-north",
+        name: "北线",
+        dataUrl: "data:image/png;base64,AAAA",
+        width: 1200,
+        height: 800,
+        opacity: 1,
+        grayscale: 0,
+        contrast: 1,
+        brightness: 1,
+      },
+      {
+        id: "map-south",
+        name: "南线",
+        dataUrl: "data:image/png;base64,BBBB",
+        width: 800,
+        height: 600,
+        opacity: 0.6,
+        grayscale: 20,
+        contrast: 1.2,
+        brightness: 0.9,
+      },
+    ];
+    project.activeMapId = "map-south";
+    project.width = 800;
+    project.height = 600;
+    project.background = {
+      dataUrl: "data:image/png;base64,BBBB",
+      opacity: 0.6,
+      grayscale: 20,
+      contrast: 1.2,
+      brightness: 0.9,
+    };
+
+    expect(parseProjectFile(serializeProject(project))).toEqual(project);
+
+    const legacy = JSON.parse(serializeProject(project)) as {
+      maps?: unknown;
+      activeMapId?: unknown;
+      background: Record<string, unknown>;
+    };
+    delete legacy.maps;
+    delete legacy.activeMapId;
+    legacy.background = {
+      dataUrl: "data:image/png;base64,CCCC",
+      opacity: 1,
+      grayscale: 0,
+      contrast: 1,
+      brightness: 1,
+    };
+    const parsed = parseProjectFile(JSON.stringify(legacy));
+
+    expect(parsed.maps).toHaveLength(1);
+    expect(parsed.maps[0]).toMatchObject({
+      name: "地图列表",
+      dataUrl: "data:image/png;base64,CCCC",
+      width: 800,
+      height: 600,
+    });
+    expect(parsed.activeMapId).toBe(parsed.maps[0].id);
+  });
+
   it("preserves disabled annotation outlines and upgrades older text", () => {
     const project = createBlankProject("批注描边");
     const text = createText(project.layers[0].id, { x: 20, y: 40 }, "岸防");
@@ -63,6 +128,28 @@ describe("project repository", () => {
     delete legacy.objects[0].strokeEnabled;
     expect(parseProjectFile(JSON.stringify(legacy)).objects[0]).toMatchObject({
       type: "text",
+      strokeEnabled: true,
+    });
+  });
+
+  it("preserves marker outline choices and defaults older markers to outlined", () => {
+    const project = createBlankProject("兵牌描边");
+    const marker = createMarker(project.layers[0].id, { x: 20, y: 40 });
+    marker.strokeEnabled = false;
+    project.objects.push(marker);
+
+    const parsed = parseProjectFile(serializeProject(project));
+    expect(parsed.objects[0]).toMatchObject({
+      type: "marker",
+      strokeEnabled: false,
+    });
+
+    const legacy = JSON.parse(serializeProject(project)) as {
+      objects: Array<Record<string, unknown>>;
+    };
+    delete legacy.objects[0].strokeEnabled;
+    expect(parseProjectFile(JSON.stringify(legacy)).objects[0]).toMatchObject({
+      type: "marker",
       strokeEnabled: true,
     });
   });
