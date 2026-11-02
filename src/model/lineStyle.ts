@@ -62,8 +62,43 @@ export function lineStyleLabel(style: LineStyle): string {
 export function lineDashArray(
   style: LineStyle,
   width: number,
+  segmentCount?: number,
+  pathLength?: number,
 ): string | undefined {
   const safeWidth = Math.max(1, width);
+
+  if (
+    pathLength &&
+    pathLength > 0 &&
+    typeof segmentCount === "number" &&
+    Number.isFinite(segmentCount)
+  ) {
+    const count = Math.min(80, Math.max(4, Math.round(segmentCount)));
+    const slot = pathLength / count;
+    const round = (value: number) => Math.round(value * 1000) / 1000;
+    switch (style) {
+      case "dashed":
+        return `${round(slot * 0.62)} ${round(slot * 0.38)}`;
+      case "dotted": {
+        const dot = Math.min(slot * 0.3, Math.max(1.5, safeWidth * 0.5));
+        return `${round(dot)} ${round(Math.max(0.5, slot - dot))}`;
+      }
+      case "phase":
+        return `${round(slot * 0.78)} ${round(slot * 0.22)}`;
+      case "dashdot": {
+        const dash = slot * 0.55;
+        const gap = slot * 0.18;
+        const dot = Math.min(slot * 0.09, Math.max(1.5, safeWidth * 0.3));
+        return `${round(dash)} ${round(gap)} ${round(dot)} ${round(
+          Math.max(0.5, slot - dash - gap - dot),
+        )}`;
+      }
+      case "solid":
+      case "double":
+      case "ticked":
+        return undefined;
+    }
+  }
 
   switch (style) {
     case "dashed":

@@ -1,5 +1,8 @@
 import {
+  memo,
+  useEffect,
   useId,
+  useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
@@ -8,6 +11,7 @@ import { flagArtworkAssetFor } from "../model/flags";
 import { lineDashArray, normalizeLineStyle } from "../model/lineStyle";
 import { buildTickMarks } from "../model/linePattern";
 import {
+  measurePath,
   polylinePathData,
   smoothPathData,
   trimPathEnd,
@@ -20,6 +24,18 @@ import {
   sampleSmoothPath,
 } from "../model/strokeGeometry";
 import { buildRegionDashArray } from "../model/regionGeometry";
+import {
+  basemapNoiseTileDataUrl,
+  buildBasemapCssFilter,
+  hasBasemapEffects,
+  processBasemapImage,
+  releaseBasemapImage,
+} from "../model/basemapEffects";
+import {
+  effectiveLayerLocked,
+  effectiveLayerOpacity,
+  effectiveLayerVisible,
+} from "../model/layerTree";
 import {
   selectionBounds,
   selectionHandlePoints,
@@ -50,6 +66,10 @@ type SceneSvgProps = {
     event: ReactPointerEvent<SVGRectElement>,
     objectId: string,
     handle: SelectionHandle,
+  ) => void;
+  onRotatePointerDown?: (
+    event: ReactPointerEvent<SVGCircleElement>,
+    objectId: string,
   ) => void;
 };
 
@@ -171,9 +191,11 @@ function Label({
 
 function ObjectNode({
   object,
+  customAssets,
   time,
 }: {
   object: SceneObject;
+  customAssets: AtlasProject["customAssets"];
   time: number | null;
 }) {
   const arrowHeadId = useId().replace(/:/g, "");
@@ -184,10 +206,12 @@ function ObjectNode({
     case "marker": {
       const scaleX = object.scaleX ?? 1;
       const scaleY = object.scaleY ?? 1;
+      const signedScaleX = scaleX * (object.flipX ? -1 : 1);
+      const signedScaleY = scaleY * (object.flipY ? -1 : 1);
       const scaleTransform =
-        scaleX === 1 && scaleY === 1
+        signedScaleX === 1 && signedScaleY === 1
           ? ""
-          : ` scale(${scaleX} ${scaleY})`;
+          : ` scale(${signedScaleX} ${signedScaleY})`;
       return (
         <g
           data-marker-style="atlas"
@@ -204,7 +228,16 @@ function ObjectNode({
               color={object.color}
               size={object.size}
               strokeEnabled={object.strokeEnabled}
+              strokeWidth={object.strokeWidth}
               symbol={object.symbol}
+              customAssetUrl={
+                object.type === "marker" &&
+                object.artworkSource === "custom"
+                  ? customAssets.find(
+                      (asset) => asset.id === object.artwork,
+                    )?.dataUrl
+                  : undefined
+              }
             />
           </g>
           {object.flagAttachment ? (
@@ -273,8 +306,13 @@ function ObjectNode({
       const dash = lineDashArray(
         style,
         (object.startWidth + effectiveEndWidth) / 2,
+        object.lineDashCount,
+        measurePath(points),
       );
-      const dashProps = dash ? { strokeDasharray: dash } : {};
+      const dashProps = {
+        "data-line-dash-count": object.lineDashCount,
+        ...(dash ? { strokeDasharray: dash } : {}),
+      };
 
       return (
         <g
@@ -522,10 +560,12 @@ function ObjectNode({
       const scaleX = object.scaleX ?? 1;
       const scaleY = object.scaleY ?? 1;
       const strokeEnabled = object.strokeEnabled !== false;
+      const signedScaleX = scaleX * (object.flipX ? -1 : 1);
+      const signedScaleY = scaleY * (object.flipY ? -1 : 1);
       const scaleTransform =
-        scaleX === 1 && scaleY === 1
+        signedScaleX === 1 && signedScaleY === 1
           ? ""
-          : ` scale(${scaleX} ${scaleY})`;
+          : ` scale(${signedScaleX} ${signedScaleY})`;
       return (
         <g
           data-object-id={object.id}
@@ -536,7 +576,7 @@ function ObjectNode({
           {object.text.split("\n").map((line, index) => (
             <text
               fill={object.color}
-              fontFamily="'IBM Plex Sans', 'Microsoft YaHei', sans-serif"
+              fontFamily={`'${object.fontFamily}', 'Microsoft YaHei', sans-serif`}
               fontSize={object.fontSize}
               fontWeight="600"
               key={`${line}-${index}`}
@@ -557,9 +597,14 @@ function ObjectNode({
         const style = normalizeLineStyle(object.lineStyle);
         const averageWidth = (object.startWidth + object.endWidth) / 2;
         const controlWidth = Math.max(object.strokeWidth, averageWidth);
-        const dash = lineDashArray(style, averageWidth);
         const path = smoothPathData(object.points);
         const sampledPath = sampleSmoothPath(object.points);
+        const dash = lineDashArray(
+          style,
+          averageWidth,
+          object.lineDashCount,
+          measurePath(sampledPath),
+        );
       return (
         <g
           data-line-style={style}
@@ -632,24 +677,197 @@ function ObjectNode({
   }
 }
 
-function Backdrop({ project }: { project: AtlasProject }) {
+function MapRasterLayer({
+  id,
+  project,
+  background,
+  interactive,
+}: {
+  id?: string;
+  project: AtlasProject;
+  background: AtlasProject["background"];
+  interactive: boolean;
+}) {
+  const noisePatternId = `basemap-noise-${useId().replace(/:/g, "")}`;
+  const [processedImage, setProcessedImage] = useState<string | null>(null);
+  const filter = buildBasemapCssFilter(background);
+  const needsProcessing =
+    interactive && hasBasemapEffects(background);
+
+  useEffect(() => {
+    let active = true;
+    let acquiredUrl: string | null = null;
+    setProcessedImage(null);
+    if (
+      !interactive ||
+      !background.dataUrl ||
+      !hasBasemapEffects(background)
+    ) {
+      return () => {
+        active = false;
+      };
+    }
+    const timer = window.setTimeout(() => {
+      processBasemapImage(background.dataUrl!, background)
+        .then((result) => {
+          if (active) {
+            acquiredUrl = result;
+            setProcessedImage(result);
+          } else {
+            releaseBasemapImage(result);
+          }
+        })
+        .catch(() => {
+          if (active) setProcessedImage(null);
+        });
+    }, 120);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+      if (acquiredUrl) releaseBasemapImage(acquiredUrl);
+    };
+  }, [
+    background.blur,
+    background.brightness,
+    background.contrast,
+    background.dataUrl,
+    background.grayscale,
+    background.noise,
+    interactive,
+  ]);
+
+  const imageHref =
+    needsProcessing
+      ? processedImage ?? background.dataUrl ?? undefined
+      : background.dataUrl ?? undefined;
+
+  return (
+    <>
+      {background.dataUrl ? (
+        <>
+          <image
+            data-background-image="true"
+            data-map-overlay-id={id}
+            height={project.height}
+            href={imageHref}
+            opacity={background.opacity}
+            preserveAspectRatio="xMidYMid slice"
+            style={
+              interactive || !filter ? undefined : { filter }
+            }
+            width={project.width}
+            x="0"
+            y="0"
+          />
+          {background.noise > 0 && !interactive ? (
+            <>
+              <defs>
+                <pattern
+                  height="96"
+                  id={noisePatternId}
+                  patternUnits="userSpaceOnUse"
+                  width="96"
+                >
+                  <image
+                    height="96"
+                    href={basemapNoiseTileDataUrl()}
+                    preserveAspectRatio="none"
+                    width="96"
+                    x="0"
+                    y="0"
+                  />
+                </pattern>
+              </defs>
+              <rect
+                data-background-noise="tile"
+                fill={`url(#${noisePatternId})`}
+                height={project.height}
+                opacity={background.noise}
+                pointerEvents="none"
+                style={{ mixBlendMode: "soft-light" }}
+                width={project.width}
+                x="0"
+                y="0"
+              />
+            </>
+          ) : null}
+          {background.contourEnabled &&
+          (background.contourImage ||
+            background.contourPaths.length > 0) ? (
+            background.contourImage ? (
+              <image
+                data-background-contour-raster="true"
+                height={project.height}
+                href={background.contourImage}
+                opacity={background.contourOpacity}
+                pointerEvents="none"
+                preserveAspectRatio="none"
+                width={project.width}
+                x="0"
+                y="0"
+              />
+            ) : (
+              <path
+                data-background-contours="true"
+                d={background.contourPaths.join(" ")}
+                fill="none"
+                opacity={background.contourOpacity}
+                pointerEvents="none"
+                stroke="#1f2430"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1"
+              />
+            )
+          ) : null}
+        </>
+      ) : null}
+    </>
+  );
+}
+
+function Backdrop({
+  project,
+  interactive,
+}: {
+  project: AtlasProject;
+  interactive: boolean;
+}) {
   const { background } = project;
+  const visibleMaps = project.maps.filter((map) => map.visible !== false);
 
   return (
     <>
       <rect fill="#d8ccb4" height={project.height} width={project.width} />
-      {background.dataUrl ? (
-        <image
-          height={project.height}
-          href={background.dataUrl}
-          opacity={background.opacity}
-          preserveAspectRatio="xMidYMid slice"
-          style={{
-            filter: `grayscale(${background.grayscale}%) contrast(${background.contrast}) brightness(${background.brightness})`,
-          }}
-          width={project.width}
-          x="0"
-          y="0"
+      {visibleMaps.length > 0 ? (
+        visibleMaps.map((map) => (
+          <MapRasterLayer
+            background={{
+              dataUrl: map.dataUrl,
+              opacity: map.opacity,
+              grayscale: map.grayscale,
+              contrast: map.contrast,
+              brightness: map.brightness,
+              blur: map.blur,
+              noise: map.noise,
+              contourEnabled: map.contourEnabled,
+              contourLevels: map.contourLevels,
+              contourOpacity: map.contourOpacity,
+              contourPaths: map.contourPaths,
+              contourImage: map.contourImage,
+              excludeBlue: map.excludeBlue,
+            }}
+            id={map.id}
+            interactive={interactive}
+            key={map.id}
+            project={project}
+          />
+        ))
+      ) : background.dataUrl ? (
+        <MapRasterLayer
+          background={background}
+          interactive={interactive}
+          project={project}
         />
       ) : (
         <g opacity="0.28">
@@ -691,13 +909,14 @@ function Backdrop({ project }: { project: AtlasProject }) {
   );
 }
 
-export function SceneSvg({
+function SceneSvgComponent({
   project,
   selectedIds,
   time,
   interactive,
   onObjectPointerDown,
   onResizePointerDown,
+  onRotatePointerDown,
 }: SceneSvgProps) {
   const selected = new Set(selectedIds);
   const layerById = new Map<string, Layer>(
@@ -729,13 +948,13 @@ export function SceneSvg({
           />
         </pattern>
       </defs>
-      <Backdrop project={project} />
+      <Backdrop interactive={interactive} project={project} />
       {project.layers.map((layer) =>
-        layer.visible ? (
+        effectiveLayerVisible(project.layers, layer.id) ? (
           <g
             data-layer-id={layer.id}
             key={layer.id}
-            opacity={layer.opacity}
+            opacity={effectiveLayerOpacity(project.layers, layer.id)}
           >
             {project.objects
               .filter((object) => object.layerId === layer.id)
@@ -743,16 +962,25 @@ export function SceneSvg({
                 <g
                   key={object.id}
                   onPointerDown={
-                    interactive && !layer.locked && onObjectPointerDown
+                    interactive &&
+                    !effectiveLayerLocked(project.layers, layer.id) &&
+                    onObjectPointerDown
                       ? (event) => onObjectPointerDown(event, object.id)
                       : undefined
                   }
                   style={{
                     cursor:
-                      interactive && !layer.locked ? "pointer" : "default",
+                      interactive &&
+                      !effectiveLayerLocked(project.layers, layer.id)
+                        ? "pointer"
+                        : "default",
                   }}
                 >
-                  <ObjectNode object={object} time={time} />
+                  <ObjectNode
+                    customAssets={project.customAssets}
+                    object={object}
+                    time={time}
+                  />
                   {interactive && selected.has(object.id) ? (
                     <g
                       className="selection-chrome"
@@ -773,6 +1001,42 @@ export function SceneSvg({
                               width={bounds.width}
                               x={bounds.x}
                               y={bounds.y}
+                            />
+                            <line
+                              stroke="#e3318d"
+                              strokeWidth="1.5"
+                              x1={bounds.x + bounds.width / 2}
+                              x2={bounds.x + bounds.width / 2}
+                              y1={bounds.y}
+                              y2={bounds.y - 18}
+                            />
+                            <circle
+                              className="rotation-handle"
+                              cx={bounds.x + bounds.width / 2}
+                              cy={bounds.y - 24}
+                              data-rotate-handle="true"
+                              fill="#f2efe8"
+                              onPointerDown={(event) => {
+                                if (
+                                  !interactive ||
+                                  layer.locked ||
+                                  !onRotatePointerDown
+                                ) {
+                                  return;
+                                }
+                                event.preventDefault();
+                                event.stopPropagation();
+                                onRotatePointerDown(event, object.id);
+                              }}
+                              pointerEvents={
+                                interactive && !layer.locked
+                                  ? "all"
+                                  : "none"
+                              }
+                              r="6"
+                              stroke="#e3318d"
+                              strokeWidth="1.5"
+                              style={{ cursor: "grab" }}
                             />
                             {selectionHandlePoints(bounds).map(
                               ({ handle, x, y }) => (
@@ -830,3 +1094,12 @@ export function SceneSvg({
     </svg>
   );
 }
+
+export const SceneSvg = memo(
+  SceneSvgComponent,
+  (previous, next) =>
+    previous.project === next.project &&
+    previous.selectedIds === next.selectedIds &&
+    previous.time === next.time &&
+    previous.interactive === next.interactive,
+);

@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { createMarker, createRegion } from "./project";
 import {
+  flipObject,
   objectBounds,
   resizeObjectFromDelta,
+  rotateObjectAroundCenter,
 } from "./selectionGeometry";
 
 describe("selection geometry", () => {
@@ -60,5 +62,40 @@ describe("selection geometry", () => {
         { x: 80, y: 200 },
       ]);
     }
+  });
+
+  it("rotates geometry around the selection center", () => {
+    const region = createRegion("layer", [
+      { x: 100, y: 100 },
+      { x: 200, y: 100 },
+      { x: 200, y: 200 },
+      { x: 100, y: 200 },
+    ]);
+
+    const rotated = rotateObjectAroundCenter(region, Math.PI / 2);
+
+    expect(rotated.type).toBe("region");
+    if (rotated.type === "region") {
+      expect(rotated.points).toEqual([
+        { x: 200, y: 100 },
+        { x: 200, y: 200 },
+        { x: 100, y: 200 },
+        { x: 100, y: 100 },
+      ]);
+    }
+  });
+
+  it("flips badges and tracks the mirror transform", () => {
+    const marker = createMarker("layer", { x: 100, y: 80 });
+    marker.rotation = 30;
+
+    const flipped = flipObject(marker, "horizontal");
+
+    expect(flipped).toMatchObject({
+      type: "marker",
+      flipX: true,
+      flipY: false,
+      rotation: -30,
+    });
   });
 });

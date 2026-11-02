@@ -118,4 +118,47 @@ describe("asset library", () => {
       screen.getByRole("button", { name: "原图兵牌 巢穴" }),
     ).toBeInTheDocument();
   });
+
+  it("lists imported custom badges and selects them for drawing", async () => {
+    useEditorStore.getState().addCustomArtwork({
+      id: "custom-asset-test",
+      name: "自定义飞行器",
+      dataUrl: "data:image/png;base64,AAAA",
+      width: 128,
+      height: 96,
+      affiliation: "friendly",
+    });
+    render(<AssetLibrary />);
+
+    await userEvent.click(screen.getByRole("button", { name: "原图素材" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "自定义兵牌 自定义飞行器" }),
+    );
+
+    expect(useEditorStore.getState()).toMatchObject({
+      activeArtworkSource: "custom",
+      activeArtwork: "custom-asset-test",
+      tool: "marker",
+    });
+  });
+
+  it("recalls saved layer graphics from the custom library", async () => {
+    const store = useEditorStore.getState();
+    store.saveLayerAsGraphic(
+      store.project.layers[0].id,
+      "存档编队",
+    );
+    render(<AssetLibrary />);
+
+    await userEvent.click(screen.getByRole("button", { name: "原图素材" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "调用图形素材 存档编队" }),
+    );
+
+    expect(
+      useEditorStore.getState().project.layers.some(
+        (layer) => layer.kind === "group" && layer.name === "存档编队",
+      ),
+    ).toBe(true);
+  });
 });

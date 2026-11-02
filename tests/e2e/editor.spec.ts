@@ -597,6 +597,60 @@ test("previews object movement and corner resizing while dragging", async ({
   await page.mouse.up();
 });
 
+test("rotates and flips a selected object from transform controls", async ({
+  page,
+}) => {
+  await page.getByRole("button", { name: "PSD 兵牌 装甲" }).click();
+  const canvas = page.getByTestId("map-canvas");
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("Map canvas has no layout box");
+  await page.mouse.click(box.x + box.width * 0.42, box.y + box.height * 0.42);
+  await page.getByRole("button", { name: "选择", exact: true }).click();
+
+  const marker = page.locator('[data-object-type="marker"]');
+  const markerBox = await marker.boundingBox();
+  const rotateBox = await page.locator("[data-rotate-handle]").boundingBox();
+  if (!markerBox || !rotateBox) {
+    throw new Error("Transform handle has no screen bounds");
+  }
+  await page.mouse.move(
+    rotateBox.x + rotateBox.width / 2,
+    rotateBox.y + rotateBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    markerBox.x + markerBox.width / 2 + 70,
+    markerBox.y + markerBox.height / 2,
+    { steps: 6 },
+  );
+  await page.mouse.up();
+  await expect(marker).not.toHaveAttribute("transform", /rotate\(0\)/);
+
+  await page.getByRole("button", { name: "水平翻转所选" }).click();
+  await expect(marker).toHaveAttribute("transform", /scale\(-1/);
+});
+
+test("renames and edits a layer without hiding other layers", async ({
+  page,
+}) => {
+  await page.getByRole("button", { name: "PSD 兵牌 装甲" }).click();
+  const canvas = page.getByTestId("map-canvas");
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("Map canvas has no layout box");
+  await page.mouse.click(box.x + box.width * 0.42, box.y + box.height * 0.42);
+  await page.getByRole("tab", { name: "图层" }).click();
+
+  const name = page.getByLabel("图层名称 标注图层");
+  await name.fill("主标注");
+  await name.press("Enter");
+  await page.getByLabel("图层不透明度 主标注").fill("0.45");
+
+  await expect(page.getByLabel("图层名称 主标注")).toBeVisible();
+  await expect(
+    page.locator('[data-object-type="marker"]'),
+  ).toBeVisible();
+});
+
 test("toggles the outline on a text annotation", async ({ page }) => {
   await page.getByRole("button", { name: "文字", exact: true }).click();
   const canvas = page.getByTestId("map-canvas");
@@ -732,6 +786,7 @@ test("restores the latest local draft", async ({ page }) => {
 test("exports and reopens a portable project file", async ({
   page,
   browser,
+  baseURL,
 }) => {
   await page.getByRole("button", { name: "PSD 兵牌 装甲" }).click();
   const canvas = page.getByTestId("map-canvas");
@@ -751,7 +806,7 @@ test("exports and reopens a portable project file", async ({
 
   const secondContext = await browser.newContext();
   const secondPage = await secondContext.newPage();
-  await secondPage.goto("http://127.0.0.1:4173/");
+  await secondPage.goto(baseURL ?? "/");
   await secondPage.waitForTimeout(600);
   const start = secondPage.getByRole("button", { name: "直接开始绘制" });
   if (await start.isVisible()) await start.click();
@@ -765,4 +820,198 @@ test("exports and reopens a portable project file", async ({
 
   await expect(secondPage.getByTestId("object-count")).toHaveText("1 个对象");
   await secondContext.close();
+});
+
+test("groups layers and recalls a saved graphic", async ({ page }) => {
+  await page.getByRole("button", { name: "PSD 兵牌 装甲" }).click();
+  const canvas = page.getByTestId("map-canvas");
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("Map canvas has no layout box");
+  await page.mouse.click(box.x + box.width * 0.4, box.y + box.height * 0.4);
+
+  await page.getByRole("tab", { name: "图层" }).click();
+  await page.getByRole("button", { name: "编组当前图层" }).click();
+  await expect(
+    page.locator('[data-layer-kind="group"]'),
+  ).toHaveCount(1);
+  await page
+    .getByRole("button", { name: /保存图层 .* 为图形素材/ })
+    .first()
+    .click();
+
+  await page.getByRole("tab", { name: "图标" }).click();
+  await page.getByRole("button", { name: "原图素材" }).click();
+  const saved = page.getByRole("button", {
+    name: /调用图形素材/,
+  });
+  await expect(saved.first()).toBeVisible();
+  await saved.first().click();
+  await expect(page.getByTestId("object-count")).toHaveText("2 个对象");
+});
+
+test("imports a custom badge into the custom asset group", async ({
+  page,
+}) => {
+  await page.getByRole("button", { name: "原图素材" }).click();
+  await page
+    .getByLabel("选择自定义兵牌图片")
+    .setInputFiles({
+      name: "custom-badge.png",
+      mimeType: "image/png",
+      buffer: ONE_PIXEL_PNG,
+    });
+
+  await expect(
+    page.getByRole("button", {
+      name: "自定义兵牌 custom-badge",
+    }),
+  ).toBeVisible();
+  await expect(page.getByText(/已导入自定义兵牌/)).toBeVisible();
+});
+
+test("opens the new basemap filter and contour controls", async ({
+  page,
+}) => {
+  const input = page.locator(
+    'input[type="file"][accept*="image/png"]',
+  );
+  await input.setInputFiles({
+    name: "contour-map.png",
+    mimeType: "image/png",
+    buffer: ONE_PIXEL_PNG,
+  });
+  await page.getByLabel("底图虚化").fill("6");
+  await page.getByLabel("底图噪点").fill("0.16");
+  await page.getByLabel("显示自动等高线").check();
+  await page.waitForTimeout(700);
+  await expect
+    .poll(() =>
+      page
+        .locator("[data-background-image]")
+        .getAttribute("href"),
+    )
+    .toMatch(/^blob:/);
+  await expect(page.locator("[data-background-noise]")).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page
+        .locator(".canvas-transform")
+        .evaluate((element) => getComputedStyle(element).filter),
+    )
+    .toBe("none");
+
+  const background = await page.evaluate(async () => {
+    const request = indexedDB.open("tactical-atlas");
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const value = await new Promise<unknown>((resolve, reject) => {
+      const transaction = database.transaction("projects", "readonly");
+      const get = transaction.objectStore("projects").get("current");
+      get.onsuccess = () => resolve(get.result);
+      get.onerror = () => reject(get.error);
+    });
+    database.close();
+    return value as {
+      background?: {
+        blur?: number;
+        noise?: number;
+        contourEnabled?: boolean;
+      };
+    };
+  });
+
+  expect(background.background).toMatchObject({
+    blur: 6,
+    noise: 0.16,
+    contourEnabled: true,
+  });
+});
+
+test("switches independent map trees and controls overlay visibility", async ({
+  page,
+}) => {
+  const input = page.locator(
+    'input[type="file"][accept*="image/png"]',
+  );
+  await input.setInputFiles({
+    name: "map-a.png",
+    mimeType: "image/png",
+    buffer: ONE_PIXEL_PNG,
+  });
+  await page.getByRole("button", { name: "PSD 兵牌 装甲" }).click();
+  const canvas = page.getByTestId("map-canvas");
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("Map canvas has no layout box");
+  await page.mouse.click(box.x + box.width * 0.4, box.y + box.height * 0.4);
+  await expect(page.getByTestId("object-count")).toHaveText("1 个对象");
+
+  await input.setInputFiles({
+    name: "map-b.png",
+    mimeType: "image/png",
+    buffer: ONE_PIXEL_PNG,
+  });
+  await expect(page.getByTestId("object-count")).toHaveText("0 个对象");
+  const secondBox = await canvas.boundingBox();
+  if (!secondBox) throw new Error("Second map canvas has no layout box");
+  await page.mouse.click(
+    secondBox.x + secondBox.width * 0.6,
+    secondBox.y + secondBox.height * 0.6,
+  );
+  await expect(page.getByTestId("object-count")).toHaveText("1 个对象");
+  await expect(page.locator("[data-map-overlay-id]")).toHaveCount(2);
+
+  await page.getByRole("tab", { name: "地图" }).click();
+  await page.getByRole("button", { name: "选取地图 map-a" }).click();
+  await expect(page.getByTestId("object-count")).toHaveText("1 个对象");
+  await page.getByRole("button", { name: "隐藏底图 map-b" }).click();
+  await expect(page.locator("[data-map-overlay-id]")).toHaveCount(1);
+});
+
+test("generates a cached raster contour layer instead of a giant path", async ({
+  page,
+}) => {
+  const gradientBase64 = await page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 128;
+    canvas.height = 96;
+    const context = canvas.getContext("2d")!;
+    const gradient = context.createLinearGradient(0, 0, 128, 0);
+    gradient.addColorStop(0, "#303030");
+    gradient.addColorStop(0.5, "#b8b8b8");
+    gradient.addColorStop(1, "#f3f3f3");
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 128, 96);
+    context.fillStyle = "#1666d8";
+    context.fillRect(58, 0, 12, 96);
+    return canvas.toDataURL("image/png").split(",")[1];
+  });
+  const input = page.locator(
+    'input[type="file"][accept*="image/png"]',
+  );
+  await input.setInputFiles({
+    name: "contour-gradient.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(gradientBase64, "base64"),
+  });
+
+  await expect(page.getByLabel("排除蓝色水系")).toBeChecked();
+  await page
+    .getByRole("button", { name: "生成或更新等高线" })
+    .click();
+  await expect(page.getByText(/已缓存栅格等高线/)).toBeVisible();
+  await expect(
+    page.locator("[data-background-contour-raster]"),
+  ).toBeVisible();
+  await expect(page.locator("[data-background-contours]")).toHaveCount(0);
+
+  const canvas = page.getByTestId("map-canvas");
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("Map canvas has no layout box");
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, 500);
+  await expect(
+    page.locator("[data-background-contour-raster]"),
+  ).toBeVisible();
 });

@@ -1,4 +1,4 @@
-import type { ChangeEvent, ReactNode } from "react";
+import { useState, type ChangeEvent, type ReactNode } from "react";
 import { Trash } from "@phosphor-icons/react/Trash";
 
 import type {
@@ -18,7 +18,13 @@ import type {
 } from "../model/types";
 import { LINE_STYLE_OPTIONS } from "../model/lineStyle";
 import { buildTaperedRibbon } from "../model/strokeGeometry";
+import { generateContourPathsFromImage } from "../model/contours";
 import { applyRegionShapePreset } from "../model/regionGeometry";
+import {
+  flipObject,
+  objectGeometryPatch,
+  rotateObjectAroundCenter,
+} from "../model/selectionGeometry";
 import {
   CUSTOM_ASSETS,
 } from "../model/customAssets";
@@ -41,6 +47,27 @@ import {
   UNIT_TINTS,
 } from "../model/unitAssets";
 import { useEditorStore } from "../store/editorStore";
+
+const COMMON_FONT_FAMILIES = [
+  "Microsoft YaHei",
+  "SimSun",
+  "SimHei",
+  "KaiTi",
+  "FangSong",
+  "IBM Plex Sans",
+  "Noto Sans SC",
+  "Arial",
+  "Segoe UI",
+  "Times New Roman",
+];
+
+type LocalFontData = {
+  family: string;
+};
+
+type FontAccessWindow = Window & {
+  queryLocalFonts?: () => Promise<LocalFontData[]>;
+};
 
 function Field({
   label,
@@ -163,6 +190,78 @@ function LineStyleSelect({
   );
 }
 
+function SystemFontSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [fonts, setFonts] = useState(COMMON_FONT_FAMILIES);
+  const [status, setStatus] = useState("使用内置系统字体列表");
+
+  const loadLocalFonts = async () => {
+    const queryLocalFonts = (window as FontAccessWindow).queryLocalFonts;
+    if (!queryLocalFonts) {
+      setStatus("当前浏览器不支持读取本机字体，可手动填写字体名");
+      return;
+    }
+    try {
+      const available = await queryLocalFonts();
+      const families = Array.from(
+        new Set(available.map((font) => font.family).filter(Boolean)),
+      ).sort((a, b) => a.localeCompare(b, "zh-CN"));
+      setFonts(
+        Array.from(new Set([...COMMON_FONT_FAMILIES, ...families])),
+      );
+      setStatus(`已读取 ${families.length} 个本机字体`);
+    } catch {
+      setStatus("读取本机字体被拒绝，可继续使用内置字体");
+    }
+  };
+
+  return (
+    <div className="font-picker">
+      <Field label="字体">
+        <select
+          aria-label="文字字体"
+          name="text-font-family"
+          onChange={(event) => onChange(event.target.value)}
+          value={value}
+        >
+          {!fonts.includes(value) ? (
+            <option value={value}>{value}</option>
+          ) : null}
+          {fonts.map((font) => (
+            <option key={font} value={font}>
+              {font}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <div className="font-picker__actions">
+        <button
+          className="button button-quiet"
+          onClick={loadLocalFonts}
+          type="button"
+        >
+          读取本机字体
+        </button>
+        <span>{status}</span>
+      </div>
+      <Field label="字体名称">
+        <input
+          aria-label="自定义字体名称"
+          autoComplete="off"
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="例如：Source Han Sans SC"
+          value={value}
+        />
+      </Field>
+    </div>
+  );
+}
+
 function StrokePreview({
   color,
   endWidth,
@@ -200,6 +299,10 @@ function StrokePreview({
 
 function markerFields(
   object: MarkerObject,
+  customAssets: Array<{
+    id: MarkerArtworkId;
+    name: string;
+  }>,
   update: (patch: SceneObjectPatch) => void,
 ) {
   const availableAffiliation =
@@ -212,7 +315,14 @@ function markerFields(
           shortLabel: flag.englishName,
         }))
       : object.artworkSource === "custom"
-        ? CUSTOM_ASSETS
+        ? [
+            ...CUSTOM_ASSETS,
+            ...customAssets.map((asset) => ({
+              id: asset.id,
+              label: asset.name,
+              shortLabel: "自定义",
+            })),
+          ]
         : object.artworkSource === "nato"
           ? NATO_ASSETS
           : UNIT_ASSETS.filter((asset) => asset.kind === "unit");
@@ -369,18 +479,30 @@ function markerFields(
       </Field>
       {object.artworkSource === "psd" ||
       object.artworkSource === "nato" ? (
-        <label className="check-field">
-          <input
-            aria-label="启用兵牌描边"
-            checked={object.strokeEnabled}
-            name="marker-stroke-enabled"
-            onChange={(event) =>
-              update({ strokeEnabled: event.target.checked })
-            }
-            type="checkbox"
-          />
-          启用兵牌描边
-        </label>
+        <>
+          <label className="check-field">
+            <input
+              aria-label="启用兵牌描边"
+              checked={object.strokeEnabled}
+              name="marker-stroke-enabled"
+              onChange={(event) =>
+                update({ strokeEnabled: event.target.checked })
+              }
+              type="checkbox"
+            />
+            启用兵牌描边
+          </label>
+          <Field label="描边宽度">
+            <NumberInput
+              label="兵牌描边宽度"
+              max={16}
+              min={0}
+              onChange={(strokeWidth) => update({ strokeWidth })}
+              step={0.5}
+              value={object.strokeWidth}
+            />
+          </Field>
+        </>
       ) : null}
       <Field label="旋转角度">
         <NumberInput
@@ -521,7 +643,7 @@ function arrowFields(
         <NumberInput
           label="箭头大小"
           max={160}
-          min={12}
+          min={0}
           onChange={(headSize) => update({ headSize })}
           value={object.headSize}
         />
@@ -552,6 +674,24 @@ function arrowFields(
         onChange={(lineStyle) => update({ lineStyle })}
         value={object.lineStyle}
       />
+      {["dashed", "dotted", "phase", "dashdot"].includes(
+        object.lineStyle,
+      ) ? (
+        <Field label="虚线密度">
+          <input
+            aria-label="箭头虚线段数"
+            max="80"
+            min="4"
+            name="arrow-line-dash-count"
+            onChange={(event) =>
+              update({ lineDashCount: Number(event.target.value) })
+            }
+            step="1"
+            type="range"
+            value={object.lineDashCount}
+          />
+        </Field>
+      ) : null}
       <Field label="箭头分色">
         <select
           aria-label="箭头分色"
@@ -788,6 +928,10 @@ function textFields(
           value={object.fontSize}
         />
       </Field>
+      <SystemFontSelect
+        onChange={(fontFamily) => update({ fontFamily })}
+        value={object.fontFamily}
+      />
       <label className="check-field">
         <input
           aria-label="启用批注描边"
@@ -868,6 +1012,24 @@ function freehandFields(
         onChange={(lineStyle) => update({ lineStyle })}
         value={object.lineStyle}
       />
+      {["dashed", "dotted", "phase", "dashdot"].includes(
+        object.lineStyle,
+      ) ? (
+        <Field label="虚线密度">
+          <input
+            aria-label="手绘虚线段数"
+            max="80"
+            min="4"
+            name="freehand-line-dash-count"
+            onChange={(event) =>
+              update({ lineDashCount: Number(event.target.value) })
+            }
+            step="1"
+            type="range"
+            value={object.lineDashCount}
+          />
+        </Field>
+      ) : null}
       <Field label="不透明度">
         <input
           aria-label="手绘不透明度"
@@ -893,9 +1055,45 @@ export function Inspector() {
   const removeSelected = useEditorStore((state) => state.removeSelected);
   const strokeDamping = useEditorStore((state) => state.strokeDamping);
   const setStrokeDamping = useEditorStore((state) => state.setStrokeDamping);
+  const [contourStatus, setContourStatus] = useState<string | null>(null);
   const object = project.objects.find(
     (item) => item.id === selectedIds[0],
   ) as SceneObjectPatch | undefined;
+
+  const generateContours = async () => {
+    if (!project.background.dataUrl) {
+      setContourStatus("请先导入底图");
+      return;
+    }
+    setContourStatus("正在采样并生成…");
+    try {
+      const result = await generateContourPathsFromImage(
+        project.background.dataUrl,
+        project.background.contourLevels,
+        {
+          x: 0,
+          y: 0,
+          width: project.width,
+          height: project.height,
+        },
+        {
+          excludeBlue: project.background.excludeBlue,
+        },
+      );
+      updateBackground({
+        contourPaths: [],
+        contourImage: result.rasterImage,
+        contourEnabled: true,
+      });
+      setContourStatus(
+        `已缓存栅格等高线（采样 ${result.sampleWidth}×${result.sampleHeight}）`,
+      );
+    } catch (error) {
+      setContourStatus(
+        error instanceof Error ? error.message : "等高线生成失败",
+      );
+    }
+  };
 
   if (!object) {
     return (
@@ -906,6 +1104,11 @@ export function Inspector() {
             {project.width} × {project.height}
           </span>
         </div>
+        <p className="panel-copy">
+          正在编辑：
+          {project.maps.find((map) => map.id === project.activeMapId)?.name ??
+            "项目画布"}
+        </p>
         <Field label="项目名称">
           <input
             aria-label="项目名称"
@@ -970,6 +1173,115 @@ export function Inspector() {
             value={project.background.brightness}
           />
         </Field>
+        <Field label="底图虚化">
+          <input
+            aria-label="底图虚化"
+            max="24"
+            min="0"
+            name="background-blur"
+            onChange={(event) =>
+              updateBackground({ blur: Number(event.target.value) })
+            }
+            step="0.5"
+            type="range"
+            value={project.background.blur}
+          />
+        </Field>
+        <Field label="底图噪点">
+          <input
+            aria-label="底图噪点"
+            max="1"
+            min="0"
+            name="background-noise"
+            onChange={(event) =>
+              updateBackground({ noise: Number(event.target.value) })
+            }
+            step="0.02"
+            type="range"
+            value={project.background.noise}
+          />
+        </Field>
+        <div className="inspector-section">
+          <div className="panel-heading panel-heading--compact">
+            <span>自动等高线</span>
+          </div>
+          <label className="check-field">
+            <input
+              aria-label="显示自动等高线"
+              checked={project.background.contourEnabled}
+              name="background-contour-enabled"
+              onChange={(event) =>
+                updateBackground({
+                  contourEnabled: event.target.checked,
+                })
+              }
+              type="checkbox"
+            />
+            显示亮度等值线
+          </label>
+          <label className="check-field">
+            <input
+              aria-label="排除蓝色水系"
+              checked={project.background.excludeBlue}
+              name="background-contour-exclude-blue"
+              onChange={(event) =>
+                updateBackground({
+                  excludeBlue: event.target.checked,
+                })
+              }
+              type="checkbox"
+            />
+            排除蓝色河流与水体
+          </label>
+          <Field label="等高线层数">
+            <input
+              aria-label="等高线层数"
+              max="24"
+              min="3"
+              name="background-contour-levels"
+              onChange={(event) =>
+                updateBackground({
+                  contourLevels: Number(event.target.value),
+                })
+              }
+              step="1"
+              type="range"
+              value={project.background.contourLevels}
+            />
+          </Field>
+          <Field label="等高线透明度">
+            <input
+              aria-label="等高线透明度"
+              max="1"
+              min="0.05"
+              name="background-contour-opacity"
+              onChange={(event) =>
+                updateBackground({
+                  contourOpacity: Number(event.target.value),
+                })
+              }
+              step="0.05"
+              type="range"
+              value={project.background.contourOpacity}
+            />
+          </Field>
+          <div className="contour-actions">
+            <button
+              className="button button-quiet"
+              onClick={generateContours}
+              type="button"
+            >
+              生成或更新等高线
+            </button>
+            <span>
+              {contourStatus ??
+                (project.background.contourImage ||
+                project.background.contourPaths.length > 0
+                  ? "已缓存等高线图层"
+                  : "首次使用需手动生成")}
+            </span>
+          </div>
+        </div>
         <div className="inspector-section">
           <div className="panel-heading panel-heading--compact">
             <span>绘制设置</span>
@@ -1016,8 +1328,73 @@ export function Inspector() {
         </span>
         <span className="coordinate">{selected.type}</span>
       </div>
+      <div
+        aria-label="对象变换"
+        className="transform-actions"
+        role="group"
+      >
+        <button
+          aria-label="向左旋转 90 度"
+          className="button button-quiet"
+          onClick={() =>
+            update(
+              objectGeometryPatch(
+                rotateObjectAroundCenter(selected, -Math.PI / 2),
+              ),
+            )
+          }
+          type="button"
+        >
+          左转 90°
+        </button>
+        <button
+          aria-label="向右旋转 90 度"
+          className="button button-quiet"
+          onClick={() =>
+            update(
+              objectGeometryPatch(
+                rotateObjectAroundCenter(selected, Math.PI / 2),
+              ),
+            )
+          }
+          type="button"
+        >
+          右转 90°
+        </button>
+        <button
+          aria-label="水平翻转所选"
+          className="button button-quiet"
+          onClick={() =>
+            update(
+              objectGeometryPatch(flipObject(selected, "horizontal")),
+            )
+          }
+          type="button"
+        >
+          水平翻转
+        </button>
+        <button
+          aria-label="垂直翻转所选"
+          className="button button-quiet"
+          onClick={() =>
+            update(
+              objectGeometryPatch(flipObject(selected, "vertical")),
+            )
+          }
+          type="button"
+        >
+          垂直翻转
+        </button>
+      </div>
       {selected.type === "marker"
-        ? markerFields(selected, update)
+        ? markerFields(
+            selected,
+            project.customAssets.map((asset) => ({
+              id: asset.id,
+              name: asset.name,
+            })),
+            update,
+          )
         : null}
       {selected.type === "arrow" ? arrowFields(selected, update) : null}
       {selected.type === "region" ? regionFields(selected, update) : null}
@@ -1033,4 +1410,5 @@ export function Inspector() {
       </button>
     </aside>
   );
+
 }

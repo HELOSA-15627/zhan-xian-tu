@@ -58,6 +58,17 @@ describe("project repository", () => {
         grayscale: 0,
         contrast: 1,
         brightness: 1,
+        blur: 0,
+        noise: 0,
+        contourEnabled: false,
+        contourLevels: 8,
+        contourOpacity: 0.35,
+        contourPaths: [],
+        contourImage: null,
+        excludeBlue: true,
+        visible: true,
+        layers: structuredClone(project.layers),
+        objects: structuredClone(project.objects),
       },
       {
         id: "map-south",
@@ -69,6 +80,17 @@ describe("project repository", () => {
         grayscale: 20,
         contrast: 1.2,
         brightness: 0.9,
+        blur: 0,
+        noise: 0,
+        contourEnabled: false,
+        contourLevels: 8,
+        contourOpacity: 0.35,
+        contourPaths: [],
+        contourImage: null,
+        excludeBlue: true,
+        visible: true,
+        layers: structuredClone(project.layers),
+        objects: structuredClone(project.objects),
       },
     ];
     project.activeMapId = "map-south";
@@ -80,6 +102,14 @@ describe("project repository", () => {
       grayscale: 20,
       contrast: 1.2,
       brightness: 0.9,
+      blur: 0,
+      noise: 0,
+      contourEnabled: false,
+      contourLevels: 8,
+      contourOpacity: 0.35,
+      contourPaths: [],
+      contourImage: null,
+      excludeBlue: true,
     };
 
     expect(parseProjectFile(serializeProject(project))).toEqual(project);
@@ -108,6 +138,90 @@ describe("project repository", () => {
       height: 600,
     });
     expect(parsed.activeMapId).toBe(parsed.maps[0].id);
+  });
+
+  it("migrates legacy global annotations into the active basemap tree", () => {
+    const project = createBlankProject("迁移地图");
+    project.objects.push(
+      createMarker(project.layers[0].id, { x: 30, y: 40 }),
+    );
+    const legacy = JSON.parse(serializeProject(project)) as {
+      maps: Array<Record<string, unknown>>;
+      activeMapId: string;
+    };
+    legacy.maps = [
+      {
+        id: "legacy-map",
+        name: "旧底图",
+        dataUrl: "data:image/png;base64,AAAA",
+        width: 1600,
+        height: 900,
+        opacity: 1,
+        grayscale: 0,
+        contrast: 1,
+        brightness: 1,
+      },
+    ];
+    legacy.activeMapId = "legacy-map";
+
+    const parsed = parseProjectFile(JSON.stringify(legacy));
+    expect(parsed.maps[0].visible).toBe(true);
+    expect(parsed.maps[0].layers).toHaveLength(1);
+    expect(parsed.maps[0].objects).toHaveLength(1);
+  });
+
+  it("round-trips independent layer trees for multiple basemaps", () => {
+    const project = createBlankProject("平行底图");
+    const firstLayer = project.layers[0];
+    const firstMarker = createMarker(firstLayer.id, { x: 20, y: 30 });
+    const secondLayer = {
+      ...createBlankProject().layers[0],
+      id: "layer-second",
+      name: "第二底图图层",
+    };
+    const secondMarker = createMarker(secondLayer.id, { x: 80, y: 90 });
+    const base = {
+      width: 1000,
+      height: 700,
+      opacity: 1,
+      grayscale: 0,
+      contrast: 1,
+      brightness: 1,
+      blur: 0,
+      noise: 0,
+      contourEnabled: false,
+      contourLevels: 8,
+      contourOpacity: 0.35,
+      contourPaths: [],
+      contourImage: null,
+      excludeBlue: true,
+      visible: true,
+    };
+    project.maps = [
+      {
+        ...base,
+        id: "map-one",
+        name: "第一底图",
+        dataUrl: "data:image/png;base64,AAAA",
+        layers: [firstLayer],
+        objects: [firstMarker],
+      },
+      {
+        ...base,
+        id: "map-two",
+        name: "第二底图",
+        dataUrl: "data:image/png;base64,BBBB",
+        layers: [secondLayer],
+        objects: [secondMarker],
+      },
+    ];
+    project.activeMapId = "map-two";
+    project.layers = [secondLayer];
+    project.objects = [secondMarker];
+
+    const parsed = parseProjectFile(serializeProject(project));
+    expect(parsed.maps[0].objects[0]).toMatchObject({ x: 20, y: 30 });
+    expect(parsed.maps[1].objects[0]).toMatchObject({ x: 80, y: 90 });
   });
 
   it("preserves disabled annotation outlines and upgrades older text", () => {
@@ -172,6 +286,8 @@ describe("project repository", () => {
     delete legacyObjects[1].pathMode;
     delete legacyObjects[0].scaleX;
     delete legacyObjects[0].scaleY;
+    delete legacyObjects[0].flipX;
+    delete legacyObjects[0].flipY;
 
     const parsed = parseProjectFile(JSON.stringify(legacy));
 
@@ -182,6 +298,8 @@ describe("project repository", () => {
       y: 20,
       scaleX: 1,
       scaleY: 1,
+      flipX: false,
+      flipY: false,
     });
     expect(parsed.objects[1]).toMatchObject({
       type: "arrow",

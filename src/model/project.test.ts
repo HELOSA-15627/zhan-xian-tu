@@ -77,11 +77,13 @@ describe("project factories", () => {
       endWidth: 10,
       headSize: 34,
       headStyle: "psd",
+      lineDashCount: 18,
     });
     expect(freehand).toMatchObject({
       strokeWidth: 4,
       startWidth: 4,
       endWidth: 4,
+      lineDashCount: 18,
     });
   });
 
@@ -103,7 +105,10 @@ describe("project factories", () => {
   it("creates fully opaque markers by default", () => {
     const marker = createMarker("layer-1", { x: 0, y: 0 });
 
-    expect(marker.opacity).toBe(1);
+    expect(marker).toMatchObject({
+      opacity: 1,
+      strokeWidth: 2,
+    });
   });
 
   it("places flag markers without a default annotation", () => {
@@ -156,5 +161,11 @@ describe("project factories", () => {
 
     expect(arrow.points).toHaveLength(3);
     expect(arrow.tint).toBe("objective");
+  });
+
+  it("creates text annotations with a system-safe default font", () => {
+    const text = createText("layer-1", { x: 10, y: 20 });
+
+    expect(text.fontFamily).toBe("Microsoft YaHei");
   });
 });

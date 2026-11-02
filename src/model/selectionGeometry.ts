@@ -20,6 +20,10 @@ const SELECTION_PADDING = 8;
 const MIN_SELECTION_SIZE = 24;
 const MIN_RESIZED_SIZE = 8;
 
+function roundCoordinate(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
 function pointsBounds(points: Point[]): SelectionBounds {
   if (points.length === 0) {
     return { x: 0, y: 0, width: 0, height: 0 };
@@ -163,6 +167,108 @@ function mapPoint(
   };
 }
 
+function rotatePoint(
+  point: Point,
+  center: Point,
+  radians: number,
+): Point {
+  const cosine = Math.cos(radians);
+  const sine = Math.sin(radians);
+  const dx = point.x - center.x;
+  const dy = point.y - center.y;
+  return {
+    x: roundCoordinate(center.x + dx * cosine - dy * sine),
+    y: roundCoordinate(center.y + dx * sine + dy * cosine),
+  };
+}
+
+function boundsCenter(bounds: SelectionBounds): Point {
+  return {
+    x: bounds.x + bounds.width / 2,
+    y: bounds.y + bounds.height / 2,
+  };
+}
+
+export function rotateObjectAroundCenter(
+  object: SceneObject,
+  radians: number,
+): SceneObject {
+  const next = structuredClone(object);
+  const center = boundsCenter(objectBounds(object));
+
+  switch (next.type) {
+    case "marker":
+      next.rotation += (radians * 180) / Math.PI;
+      break;
+    case "text": {
+      const origin = rotatePoint(
+        { x: next.x, y: next.y },
+        center,
+        radians,
+      );
+      next.x = origin.x;
+      next.y = origin.y;
+      next.rotation += (radians * 180) / Math.PI;
+      break;
+    }
+    case "arrow":
+      next.start = rotatePoint(next.start, center, radians);
+      next.end = rotatePoint(next.end, center, radians);
+      next.points = next.points.map((point) =>
+        rotatePoint(point, center, radians),
+      );
+      break;
+    case "region":
+    case "freehand":
+      next.points = next.points.map((point) =>
+        rotatePoint(point, center, radians),
+      );
+      break;
+  }
+
+  return next;
+}
+
+export function flipObject(
+  object: SceneObject,
+  axis: "horizontal" | "vertical",
+): SceneObject {
+  const next = structuredClone(object);
+  const bounds = objectBounds(object);
+  const center = boundsCenter(bounds);
+
+  if (next.type === "marker" || next.type === "text") {
+    if (axis === "horizontal") {
+      next.x = center.x * 2 - next.x;
+      next.flipX = !next.flipX;
+    } else {
+      next.y = center.y * 2 - next.y;
+      next.flipY = !next.flipY;
+    }
+    next.rotation = -next.rotation;
+    return next;
+  }
+
+  const flipPoint = (point: Point): Point =>
+    axis === "horizontal"
+      ? { x: center.x * 2 - point.x, y: point.y }
+      : { x: point.x, y: center.y * 2 - point.y };
+
+  switch (next.type) {
+    case "arrow":
+      next.start = flipPoint(next.start);
+      next.end = flipPoint(next.end);
+      next.points = next.points.map(flipPoint);
+      break;
+    case "region":
+    case "freehand":
+      next.points = next.points.map(flipPoint);
+      break;
+  }
+
+  return next;
+}
+
 export function resizeObjectFromDelta(
   object: SceneObject,
   handle: SelectionHandle,
@@ -219,6 +325,9 @@ export function objectGeometryPatch(
         y: object.y,
         scaleX: object.scaleX,
         scaleY: object.scaleY,
+        flipX: object.flipX,
+        flipY: object.flipY,
+        rotation: object.rotation,
       };
     case "arrow":
       return {

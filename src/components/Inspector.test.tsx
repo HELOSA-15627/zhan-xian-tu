@@ -85,6 +85,47 @@ describe("inspector", () => {
     });
   });
 
+  it("adjusts the marker outline width", () => {
+    const store = useEditorStore.getState();
+    const marker = createMarker(store.project.layers[0].id, {
+      x: 20,
+      y: 20,
+    });
+    store.addObject(marker);
+    store.setSelection([marker.id]);
+    render(<Inspector />);
+
+    fireEvent.change(screen.getByLabelText("兵牌描边宽度"), {
+      target: { value: "4.5" },
+    });
+
+    expect(useEditorStore.getState().project.objects[0]).toMatchObject({
+      strokeWidth: 4.5,
+    });
+  });
+
+  it("flips the selected object from transform actions", async () => {
+    const store = useEditorStore.getState();
+    const marker = createMarker(store.project.layers[0].id, {
+      x: 40,
+      y: 50,
+    });
+    marker.rotation = 15;
+    store.addObject(marker);
+    store.setSelection([marker.id]);
+    render(<Inspector />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "水平翻转所选" }),
+    );
+
+    expect(useEditorStore.getState().project.objects[0]).toMatchObject({
+      type: "marker",
+      flipX: true,
+      rotation: -15,
+    });
+  });
+
   it("shows flag artwork with its Chinese country label", () => {
     const store = useEditorStore.getState();
     const marker = createMarker(
@@ -184,6 +225,27 @@ describe("inspector", () => {
     });
   });
 
+  it("selects a system font for text annotations", async () => {
+    const store = useEditorStore.getState();
+    const text = createText(
+      store.project.layers[0].id,
+      { x: 40, y: 60 },
+      "字体批注",
+    );
+    store.addObject(text);
+    store.setSelection([text.id]);
+    render(<Inspector />);
+
+    await userEvent.selectOptions(
+      screen.getByLabelText("文字字体"),
+      "Microsoft YaHei",
+    );
+
+    expect(useEditorStore.getState().project.objects[0]).toMatchObject({
+      fontFamily: "Microsoft YaHei",
+    });
+  });
+
   it("updates the selected arrow line style", async () => {
     const store = useEditorStore.getState();
     const arrow = createArrow(
@@ -202,6 +264,27 @@ describe("inspector", () => {
 
     expect(useEditorStore.getState().project.objects[0]).toMatchObject({
       lineStyle: "dashed",
+    });
+  });
+
+  it("adjusts the number of dashed arrow segments", () => {
+    const store = useEditorStore.getState();
+    const arrow = createArrow(
+      store.project.layers[0].id,
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      "dashed",
+    );
+    store.addObject(arrow);
+    store.setSelection([arrow.id]);
+    render(<Inspector />);
+
+    fireEvent.change(screen.getByLabelText("箭头虚线段数"), {
+      target: { value: "32" },
+    });
+
+    expect(useEditorStore.getState().project.objects[0]).toMatchObject({
+      lineDashCount: 32,
     });
   });
 
@@ -269,6 +352,26 @@ describe("inspector", () => {
     expect(useEditorStore.getState().project.objects[0]).toMatchObject({
       headSize: 160,
       headStyle: "spear",
+    });
+  });
+
+  it("allows the arrowhead size to go down to zero", () => {
+    const store = useEditorStore.getState();
+    const arrow = createArrow(
+      store.project.layers[0].id,
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+    );
+    store.addObject(arrow);
+    store.setSelection([arrow.id]);
+    render(<Inspector />);
+
+    const size = screen.getByLabelText("箭头大小");
+    expect(size).toHaveAttribute("min", "0");
+    fireEvent.change(size, { target: { value: "0" } });
+
+    expect(useEditorStore.getState().project.objects[0]).toMatchObject({
+      headSize: 0,
     });
   });
 
@@ -439,6 +542,27 @@ describe("inspector", () => {
     expect(useEditorStore.getState().project.objects[0]).toMatchObject({
       fill: "#b9e253",
       stroke: "#b9e253",
+    });
+  });
+
+  it("adjusts basemap blur, noise and contour visibility", () => {
+    useEditorStore
+      .getState()
+      .applyBackground("data:image/png;base64,AAAA", 1200, 800);
+    render(<Inspector />);
+
+    fireEvent.change(screen.getByLabelText("底图虚化"), {
+      target: { value: "7" },
+    });
+    fireEvent.change(screen.getByLabelText("底图噪点"), {
+      target: { value: "0.2" },
+    });
+    fireEvent.click(screen.getByLabelText("显示自动等高线"));
+
+    expect(useEditorStore.getState().project.background).toMatchObject({
+      blur: 7,
+      noise: 0.2,
+      contourEnabled: true,
     });
   });
 

@@ -52,4 +52,35 @@ describe("map panel", () => {
     });
     expect(useEditorStore.getState().project.background.opacity).toBe(0.55);
   });
+
+  it("controls overlay visibility and stacking order independently", async () => {
+    const store = useEditorStore.getState();
+    store.applyBackground(
+      "data:image/png;base64,AAAA",
+      1200,
+      800,
+      "底层",
+    );
+    store.applyBackground(
+      "data:image/png;base64,BBBB",
+      800,
+      600,
+      "上层",
+    );
+    render(<MapPanel />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "隐藏底图 底层" }),
+    );
+    expect(
+      useEditorStore
+        .getState()
+        .project.maps.find((map) => map.name === "底层")?.visible,
+    ).toBe(false);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "下移底图 上层" }),
+    );
+    expect(useEditorStore.getState().project.maps[0].name).toBe("上层");
+  });
 });

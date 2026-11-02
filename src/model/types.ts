@@ -35,7 +35,9 @@ export type UnitArtworkId =
   | "friendly-fighter-clean"
   | "hostile-destroyed";
 
-export type CustomArtworkId = "custom-nest";
+export type CustomArtworkId =
+  | "custom-nest"
+  | `custom-asset-${string}`;
 
 export type NatoArtworkId =
   | "nato-infantry"
@@ -84,6 +86,9 @@ export type Layer = {
   visible: boolean;
   locked: boolean;
   opacity: number;
+  parentId: string | null;
+  kind: "layer" | "group";
+  expanded: boolean;
 };
 
 export type AnimationSpec = {
@@ -124,10 +129,13 @@ export type MarkerObject = BaseObject & {
   size: number;
   scaleX: number;
   scaleY: number;
+  flipX: boolean;
+  flipY: boolean;
   rotation: number;
   opacity: number;
   color: string;
   strokeEnabled: boolean;
+  strokeWidth: number;
   symbol: TacticalSymbol;
   affiliation: UnitAffiliation;
   artwork: MarkerArtworkId;
@@ -153,6 +161,7 @@ export type ArrowObject = BaseObject &
   dashed: boolean;
   animation: AnimationSpec;
   label: string;
+  lineDashCount: number;
 };
 
 export type RegionObject = BaseObject & {
@@ -176,12 +185,15 @@ export type TextObject = BaseObject & {
   y: number;
   scaleX: number;
   scaleY: number;
+  flipX: boolean;
+  flipY: boolean;
   text: string;
   color: string;
   fontSize: number;
   strokeEnabled: boolean;
   rotation: number;
   opacity: number;
+  fontFamily: string;
 };
 
 export type FreehandObject = BaseObject &
@@ -193,6 +205,7 @@ export type FreehandObject = BaseObject &
   opacity: number;
   lineStyle: LineStyle;
   label: string;
+  lineDashCount: number;
 };
 
 export type SceneObject =
@@ -210,6 +223,8 @@ export type SceneObjectPatch = {
   size?: number;
   scaleX?: number;
   scaleY?: number;
+  flipX?: boolean;
+  flipY?: boolean;
   rotation?: number;
   opacity?: number;
   color?: string;
@@ -242,6 +257,7 @@ export type SceneObjectPatch = {
   strokeWidth?: number;
   text?: string;
   fontSize?: number;
+  fontFamily?: string;
 };
 
 export type BackgroundSettings = {
@@ -250,6 +266,14 @@ export type BackgroundSettings = {
   grayscale: number;
   contrast: number;
   brightness: number;
+  blur: number;
+  noise: number;
+  contourEnabled: boolean;
+  contourLevels: number;
+  contourOpacity: number;
+  contourPaths: string[];
+  contourImage: string | null;
+  excludeBlue: boolean;
 };
 
 export type ImportedMap = {
@@ -262,6 +286,35 @@ export type ImportedMap = {
   grayscale: number;
   contrast: number;
   brightness: number;
+  blur: number;
+  noise: number;
+  contourEnabled: boolean;
+  contourLevels: number;
+  contourOpacity: number;
+  contourPaths: string[];
+  contourImage: string | null;
+  excludeBlue: boolean;
+  visible: boolean;
+  layers: Layer[];
+  objects: SceneObject[];
+};
+
+export type UserArtworkAsset = {
+  id: `custom-asset-${string}`;
+  name: string;
+  dataUrl: string;
+  width: number;
+  height: number;
+  affiliation: UnitAffiliation;
+};
+
+export type SavedGraphic = {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  layers: Layer[];
+  objects: SceneObject[];
 };
 
 export type AtlasProject = {
@@ -276,6 +329,8 @@ export type AtlasProject = {
   activeMapId: string | null;
   layers: Layer[];
   objects: SceneObject[];
+  customAssets: UserArtworkAsset[];
+  savedGraphics: SavedGraphic[];
 };
 
 export type EditorTool =

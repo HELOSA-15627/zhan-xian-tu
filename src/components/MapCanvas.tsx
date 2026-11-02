@@ -38,10 +38,20 @@ import {
   regionContainsPoint,
 } from "../model/regionGeometry";
 import {
+  objectBounds,
   objectGeometryPatch,
   resizeObjectFromDelta,
+  rotateObjectAroundCenter,
   type SelectionHandle,
 } from "../model/selectionGeometry";
+import {
+  buildAlignmentGuides,
+  type AlignmentGuide,
+} from "../model/alignmentGuides";
+import {
+  effectiveLayerLocked,
+  effectiveLayerVisible,
+} from "../model/layerTree";
 import {
   buildOpenOffsetPath,
   buildTaperedRibbon,
@@ -80,6 +90,13 @@ type ObjectResize = {
   object: SceneObject;
   handle: SelectionHandle;
   start: Point;
+};
+
+type ObjectRotate = {
+  objectId: string;
+  object: SceneObject;
+  center: Point;
+  startAngle: number;
 };
 
 type ClickPlacement = {
@@ -229,6 +246,7 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
   } | null>(null);
   const objectDragRef = useRef<ObjectDrag | null>(null);
   const objectResizeRef = useRef<ObjectResize | null>(null);
+  const objectRotateRef = useRef<ObjectRotate | null>(null);
   const clickPlacementRef = useRef<ClickPlacement | null>(null);
   const foldClickPlacementRef = useRef<FoldClickPlacement | null>(null);
   const foldArrowRef = useRef<Point[]>([]);
@@ -244,6 +262,9 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
   const [objectPreview, setObjectPreview] = useState<SceneObject | null>(
     null,
   );
+  const [alignmentGuides, setAlignmentGuides] = useState<
+    AlignmentGuide[]
+  >([]);
 
   const project = useEditorStore((state) => state.project);
   const viewport = useEditorStore((state) => state.viewport);
@@ -272,7 +293,9 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
 
   const activeLayer = project.layers.find((layer) => layer.id === activeLayerId);
   const drawingEnabled = Boolean(
-    activeLayer && activeLayer.visible && !activeLayer.locked,
+    activeLayer &&
+      effectiveLayerVisible(project.layers, activeLayer.id) &&
+      !effectiveLayerLocked(project.layers, activeLayer.id),
   );
 
   useLayoutEffect(() => {
@@ -308,8 +331,10 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
         setDirectRegionDraft(null);
         setFoldCursor(null);
         setObjectPreview(null);
+        setAlignmentGuides([]);
         objectDragRef.current = null;
         objectResizeRef.current = null;
+        objectRotateRef.current = null;
         foldClickPlacementRef.current = null;
         setTool("select");
       }
@@ -353,14 +378,55 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
   ) => {
     const object = project.objects.find((item) => item.id === objectId);
     const layer = project.layers.find((item) => item.id === object?.layerId);
-    if (!object || !layer?.visible || layer.locked) return;
+    if (
+      !object ||
+      !layer ||
+      !effectiveLayerVisible(project.layers, layer.id) ||
+      effectiveLayerLocked(project.layers, layer.id)
+    ) {
+      return;
+    }
 
     objectDragRef.current = null;
+    objectRotateRef.current = null;
     objectResizeRef.current = {
       objectId,
       object,
       handle,
       start: toWorld(event),
+    };
+    setObjectPreview(object);
+    viewportRef.current?.setPointerCapture?.(event.pointerId);
+  };
+
+  const beginObjectRotate = (
+    event: ReactPointerEvent<SVGCircleElement>,
+    objectId: string,
+  ) => {
+    const object = project.objects.find((item) => item.id === objectId);
+    const layer = project.layers.find((item) => item.id === object?.layerId);
+    if (
+      !object ||
+      !layer ||
+      !effectiveLayerVisible(project.layers, layer.id) ||
+      effectiveLayerLocked(project.layers, layer.id)
+    ) {
+      return;
+    }
+
+    const bounds = objectBounds(object);
+    const center = {
+      x: bounds.x + bounds.width / 2,
+      y: bounds.y + bounds.height / 2,
+    };
+    const point = toWorld(event);
+    objectDragRef.current = null;
+    objectResizeRef.current = null;
+    objectRotateRef.current = {
+      objectId,
+      object,
+      center,
+      startAngle: Math.atan2(point.y - center.y, point.x - center.x),
     };
     setObjectPreview(object);
     viewportRef.current?.setPointerCapture?.(event.pointerId);
@@ -573,6 +639,22 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
       setFoldCursor(toWorld(event));
     }
 
+    if (objectRotateRef.current) {
+      const rotate = objectRotateRef.current;
+      const point = toWorld(event);
+      const currentAngle = Math.atan2(
+        point.y - rotate.center.y,
+        point.x - rotate.center.x,
+      );
+      let delta = currentAngle - rotate.startAngle;
+      if (delta > Math.PI) delta -= Math.PI * 2;
+      if (delta < -Math.PI) delta += Math.PI * 2;
+      setObjectPreview(
+        rotateObjectAroundCenter(rotate.object, delta),
+      );
+      return;
+    }
+
     if (objectResizeRef.current) {
       const resize = objectResizeRef.current;
       const point = toWorld(event);
@@ -592,11 +674,32 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
       const point = toWorld(event);
       drag.last = point;
       setObjectPreview(
-        moveObject(
+        (() => {
+          const preview = moveObject(
           drag.object,
           point.x - drag.start.x,
           point.y - drag.start.y,
-        ),
+          );
+          const neighbors = project.objects
+            .filter((object) => object.id !== drag.objectId)
+            .filter((object) => {
+              const layer = project.layers.find(
+                (candidate) => candidate.id === object.layerId,
+              );
+              return (
+                layer &&
+                effectiveLayerVisible(project.layers, layer.id)
+              );
+            })
+            .map((object) => ({
+              id: object.id,
+              bounds: objectBounds(object),
+            }));
+          setAlignmentGuides(
+            buildAlignmentGuides(objectBounds(preview), neighbors, 80),
+          );
+          return preview;
+        })(),
       );
     }
 
@@ -708,6 +811,29 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
       return;
     }
 
+    if (objectRotateRef.current) {
+      const rotate = objectRotateRef.current;
+      const end = toWorld(event);
+      const currentAngle = Math.atan2(
+        end.y - rotate.center.y,
+        end.x - rotate.center.x,
+      );
+      let delta = currentAngle - rotate.startAngle;
+      if (delta > Math.PI) delta -= Math.PI * 2;
+      if (delta < -Math.PI) delta += Math.PI * 2;
+      if (Math.abs(delta) > 0.001) {
+        updateObject(
+          rotate.objectId,
+          objectGeometryPatch(
+            rotateObjectAroundCenter(rotate.object, delta),
+          ),
+        );
+      }
+      objectRotateRef.current = null;
+      setObjectPreview(null);
+      return;
+    }
+
     if (objectResizeRef.current) {
       const resize = objectResizeRef.current;
       const end = toWorld(event);
@@ -741,6 +867,7 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
       }
       objectDragRef.current = null;
       setObjectPreview(null);
+      setAlignmentGuides([]);
     }
   };
 
@@ -788,6 +915,7 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
       onPointerCancel={() => {
         objectDragRef.current = null;
         objectResizeRef.current = null;
+        objectRotateRef.current = null;
         setObjectPreview(null);
       }}
       onPointerMove={handlePointerMove}
@@ -812,6 +940,7 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
           interactive={tool === "select"}
           onObjectPointerDown={selectObject}
           onResizePointerDown={beginObjectResize}
+          onRotatePointerDown={beginObjectRotate}
           project={displayedProject}
           selectedIds={selectedIds}
           time={animationTime}
@@ -866,6 +995,58 @@ export function MapCanvas({ animationTime = null }: MapCanvasProps) {
               />
             </g>
           ) : null}
+          {alignmentGuides.map((guide, index) => (
+            <g
+              data-alignment-guide={guide.axis}
+              key={`${guide.axis}-${guide.neighborId}-${index}`}
+              pointerEvents="none"
+            >
+              {guide.axis === "x" ? (
+                <>
+                  <line
+                    stroke="#e3318d"
+                    strokeDasharray="4 3"
+                    strokeWidth="1"
+                    x1={guide.from}
+                    x2={guide.to}
+                    y1={guide.cross}
+                    y2={guide.cross}
+                  />
+                  <text
+                    fill="#e3318d"
+                    fontSize="12"
+                    fontWeight="700"
+                    textAnchor="middle"
+                    x={(guide.from + guide.to) / 2}
+                    y={guide.cross - 6}
+                  >
+                    {Math.round(guide.distance)} px
+                  </text>
+                </>
+              ) : (
+                <>
+                  <line
+                    stroke="#e3318d"
+                    strokeDasharray="4 3"
+                    strokeWidth="1"
+                    x1={guide.cross}
+                    x2={guide.cross}
+                    y1={guide.from}
+                    y2={guide.to}
+                  />
+                  <text
+                    fill="#e3318d"
+                    fontSize="12"
+                    fontWeight="700"
+                    x={guide.cross + 6}
+                    y={(guide.from + guide.to) / 2}
+                  >
+                    {Math.round(guide.distance)} px
+                  </text>
+                </>
+              )}
+            </g>
+          ))}
         </svg>
       </div>
       <div className="canvas-coordinates" aria-live="polite">

@@ -5,7 +5,8 @@ import type {
   SceneObject,
 } from "../model/types";
 import { isLineStyle } from "../model/lineStyle";
-import { normalizeStrokeWidth } from "../model/project";
+import { createLayer, normalizeStrokeWidth } from "../model/project";
+import { syncActiveMapState } from "../model/mapState";
 import {
   defaultFlagArtwork,
   isFlagArtwork,
@@ -104,6 +105,27 @@ function normalizeScale(value: unknown): number {
   );
 }
 
+function normalizeBackgroundNumber(
+  value: unknown,
+  fallback: number,
+): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : fallback;
+}
+
+function normalizeContourLevels(value: unknown): number {
+  return Math.min(
+    24,
+    Math.max(
+      3,
+      typeof value === "number" && Number.isFinite(value)
+        ? Math.round(value)
+        : 8,
+    ),
+  );
+}
+
 function isSceneObject(value: unknown): value is SceneObject {
   if (
     !isRecord(value) ||
@@ -195,6 +217,27 @@ function validateProject(value: unknown): AtlasProject {
               grayscale: project.background.grayscale,
               contrast: project.background.contrast,
               brightness: project.background.brightness,
+              blur: normalizeBackgroundNumber(project.background.blur, 0),
+              noise: normalizeBackgroundNumber(project.background.noise, 0),
+              contourEnabled: project.background.contourEnabled === true,
+              contourLevels: normalizeContourLevels(
+                project.background.contourLevels,
+              ),
+              contourOpacity: normalizeBackgroundNumber(
+                project.background.contourOpacity,
+                0.35,
+              ),
+              contourPaths: Array.isArray(project.background.contourPaths)
+                ? project.background.contourPaths
+                : [],
+              contourImage:
+                typeof project.background.contourImage === "string"
+                  ? project.background.contourImage
+                  : null,
+              excludeBlue: project.background.excludeBlue !== false,
+              visible: true,
+              layers: structuredClone(project.layers),
+              objects: structuredClone(project.objects),
             },
           ]
         : [];
@@ -203,10 +246,48 @@ function validateProject(value: unknown): AtlasProject {
     maps.at(-1)?.id ??
     null;
   const activeMap = maps.find((map) => map.id === activeMapId);
-  return {
+  const layers = project.layers.map((layer) => ({
+    ...layer,
+    parentId:
+      typeof layer.parentId === "string" &&
+      project.layers.some((candidate) => candidate.id === layer.parentId)
+        ? layer.parentId
+        : null,
+    kind:
+      layer.kind === "group"
+        ? ("group" as const)
+        : ("layer" as const),
+    expanded: layer.expanded !== false,
+  }));
+  const validated: AtlasProject = {
     ...project,
-    maps,
+    maps: maps.map((map) => ({
+      ...map,
+      blur: normalizeBackgroundNumber(map.blur, 0),
+      noise: normalizeBackgroundNumber(map.noise, 0),
+      contourEnabled: map.contourEnabled === true,
+      contourLevels: normalizeContourLevels(map.contourLevels),
+      contourOpacity: normalizeBackgroundNumber(map.contourOpacity, 0.35),
+      contourPaths: Array.isArray(map.contourPaths) ? map.contourPaths : [],
+      contourImage:
+        typeof map.contourImage === "string" ? map.contourImage : null,
+      excludeBlue: map.excludeBlue !== false,
+      visible: map.visible !== false,
+      layers:
+        map.id === activeMapId
+          ? layers
+          : Array.isArray(map.layers) && map.layers.length > 0
+            ? map.layers
+            : [createLayer("标注图层")],
+      objects:
+        map.id === activeMapId
+          ? project.objects
+          : Array.isArray(map.objects)
+            ? map.objects
+            : [],
+    })),
     activeMapId,
+    layers,
     background: activeMap
       ? {
           dataUrl: activeMap.dataUrl,
@@ -214,8 +295,50 @@ function validateProject(value: unknown): AtlasProject {
           grayscale: activeMap.grayscale,
           contrast: activeMap.contrast,
           brightness: activeMap.brightness,
+          blur: normalizeBackgroundNumber(activeMap.blur, 0),
+          noise: normalizeBackgroundNumber(activeMap.noise, 0),
+          contourEnabled: activeMap.contourEnabled === true,
+          contourLevels: normalizeContourLevels(activeMap.contourLevels),
+          contourOpacity: normalizeBackgroundNumber(
+            activeMap.contourOpacity,
+            0.35,
+          ),
+          contourPaths: Array.isArray(activeMap.contourPaths)
+            ? activeMap.contourPaths
+            : [],
+          contourImage:
+            typeof activeMap.contourImage === "string"
+              ? activeMap.contourImage
+              : null,
+          excludeBlue: activeMap.excludeBlue !== false,
         }
-      : project.background,
+      : {
+          ...project.background,
+          blur: normalizeBackgroundNumber(project.background.blur, 0),
+          noise: normalizeBackgroundNumber(project.background.noise, 0),
+          contourEnabled: project.background.contourEnabled === true,
+          contourLevels: normalizeContourLevels(
+            project.background.contourLevels,
+          ),
+          contourOpacity: normalizeBackgroundNumber(
+            project.background.contourOpacity,
+            0.35,
+          ),
+          contourPaths: Array.isArray(project.background.contourPaths)
+            ? project.background.contourPaths
+            : [],
+          contourImage:
+            typeof project.background.contourImage === "string"
+              ? project.background.contourImage
+              : null,
+          excludeBlue: project.background.excludeBlue !== false,
+        },
+    customAssets: Array.isArray(project.customAssets)
+      ? project.customAssets
+      : [],
+    savedGraphics: Array.isArray(project.savedGraphics)
+      ? project.savedGraphics
+      : [],
     objects: project.objects.map((object) => {
       if (object.type === "marker") {
         const next = structuredClone(object);
@@ -259,8 +382,17 @@ function validateProject(value: unknown): AtlasProject {
           Math.max(0, typeof next.opacity === "number" ? next.opacity : 1),
         );
         next.strokeEnabled = next.strokeEnabled !== false;
+        next.strokeWidth = Math.min(
+          16,
+          Math.max(
+            0,
+            typeof next.strokeWidth === "number" ? next.strokeWidth : 2,
+          ),
+        );
         next.scaleX = normalizeScale(next.scaleX);
         next.scaleY = normalizeScale(next.scaleY);
+        next.flipX = next.flipX === true;
+        next.flipY = next.flipY === true;
         next.flagAttachment = normalizeFlagAttachment(next.flagAttachment);
         return next;
       }
@@ -294,7 +426,14 @@ function validateProject(value: unknown): AtlasProject {
         const next = structuredClone(object);
         next.scaleX = normalizeScale(next.scaleX);
         next.scaleY = normalizeScale(next.scaleY);
+        next.flipX = next.flipX === true;
+        next.flipY = next.flipY === true;
         next.strokeEnabled = next.strokeEnabled !== false;
+        next.fontFamily =
+          typeof next.fontFamily === "string" &&
+          next.fontFamily.trim().length > 0
+            ? next.fontFamily
+            : "Microsoft YaHei";
         return next;
       }
 
@@ -311,7 +450,7 @@ function validateProject(value: unknown): AtlasProject {
         next.headSize = Math.min(
           160,
           Math.max(
-            12,
+            0,
             typeof next.headSize === "number" ? next.headSize : 34,
           ),
         );
@@ -338,13 +477,41 @@ function validateProject(value: unknown): AtlasProject {
         next.lineStyle =
           next.type === "arrow" && next.dashed ? "dashed" : "solid";
       }
+      next.lineDashCount = Math.min(
+        80,
+        Math.max(
+          4,
+          Number.isFinite(next.lineDashCount)
+            ? Math.round(next.lineDashCount)
+            : 18,
+        ),
+      );
+      if (next.type === "arrow") {
+        next.headSize = Math.min(
+          160,
+          Math.max(
+            0,
+            typeof next.headSize === "number" ? next.headSize : 34,
+          ),
+        );
+      }
       return next;
     }),
   };
+  validated.maps = validated.maps.map((map) =>
+    map.id === validated.activeMapId
+      ? {
+          ...map,
+          layers: structuredClone(validated.layers),
+          objects: structuredClone(validated.objects),
+        }
+      : map,
+  );
+  return validated;
 }
 
 export async function saveProject(project: AtlasProject): Promise<void> {
-  const snapshot = structuredClone(project);
+  const snapshot = syncActiveMapState(structuredClone(project));
   await withStore("readwrite", async (store) => {
     await requestResult(store.put(snapshot, CURRENT_KEY));
   });
@@ -376,5 +543,9 @@ export function parseProjectFile(text: string): AtlasProject {
 }
 
 export function serializeProject(project: AtlasProject): string {
-  return JSON.stringify(project, null, 2);
+  return JSON.stringify(
+    syncActiveMapState(structuredClone(project)),
+    null,
+    2,
+  );
 }

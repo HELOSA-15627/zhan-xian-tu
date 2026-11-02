@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
 
 import {
   lineDashArray,
@@ -19,6 +19,11 @@ import {
 import { buildTickMarks } from "../model/linePattern";
 import { buildTaperedRibbon } from "../model/strokeGeometry";
 import { FLAG_ASSETS, defaultFlagArtwork } from "../model/flags";
+import {
+  readFileAsDataUrl,
+  readImageSize,
+  validateImageFile,
+} from "../import/backgroundImport";
 import { useEditorStore } from "../store/editorStore";
 import { TacticalSymbol } from "./TacticalSymbol";
 
@@ -70,6 +75,9 @@ function LineStylePreview({
 
 export function AssetLibrary() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [assetNotice, setAssetNotice] = useState<string | null>(null);
+  const customAssetInputRef = useRef<HTMLInputElement>(null);
+  const project = useEditorStore((state) => state.project);
   const activeAffiliation = useEditorStore(
     (state) => state.activeAffiliation,
   );
@@ -102,6 +110,12 @@ export function AssetLibrary() {
   );
   const setActiveBrush = useEditorStore((state) => state.setActiveBrush);
   const setTool = useEditorStore((state) => state.setTool);
+  const addCustomArtwork = useEditorStore(
+    (state) => state.addCustomArtwork,
+  );
+  const insertSavedGraphic = useEditorStore(
+    (state) => state.insertSavedGraphic,
+  );
   const visibleAssets = UNIT_ASSETS.filter(
     (asset) => asset.defaultAffiliation === activeAffiliation,
   );
@@ -160,6 +174,20 @@ export function AssetLibrary() {
           symbol: asset.symbol,
           affiliation: "hostile" as const,
         })),
+        ...project.customAssets
+          .filter((asset) =>
+            asset.name.toLocaleLowerCase().includes(normalizedQuery),
+          )
+          .map((asset) => ({
+            source: "custom" as const,
+            sourceLabel: "自定义",
+            id: asset.id,
+            label: asset.name,
+            code: "已导入",
+            symbol: "friendly" as const,
+            affiliation: asset.affiliation,
+            customAssetUrl: asset.dataUrl,
+          })),
         ...FLAG_ASSETS.filter((flag) =>
           `${flag.chineseName} ${flag.englishName}`
             .toLocaleLowerCase()
@@ -189,6 +217,43 @@ export function AssetLibrary() {
       />
     </label>
   );
+
+  const handleCustomAssetImport = async (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      validateImageFile(file);
+      const dataUrl = await readFileAsDataUrl(file);
+      const size = await readImageSize(dataUrl);
+      const affiliation =
+        activeAffiliation === "objective"
+          ? "friendly"
+          : activeAffiliation;
+      const id = `custom-asset-${crypto.randomUUID()}` as const;
+      const name = file.name.replace(/\.[^.]+$/, "") || "自定义兵牌";
+      addCustomArtwork({
+        id,
+        name,
+        dataUrl,
+        width: size.width,
+        height: size.height,
+        affiliation,
+      });
+      setActiveArtworkSource("custom");
+      setActiveAffiliation(affiliation);
+      setActiveArtwork(id);
+      setActiveSymbol("friendly");
+      setTool("marker");
+      setAssetNotice(`已导入自定义兵牌：${name}`);
+    } catch (error) {
+      setAssetNotice(
+        error instanceof Error ? error.message : "自定义兵牌导入失败",
+      );
+    }
+  };
 
   if (normalizedQuery) {
     return (
@@ -224,6 +289,11 @@ export function AssetLibrary() {
                   artwork={result.id}
                   artworkSource={result.source}
                   color={AFFILIATION_COLORS[result.affiliation]}
+                  customAssetUrl={
+                    "customAssetUrl" in result
+                      ? result.customAssetUrl
+                      : undefined
+                  }
                   size={56}
                   symbol={result.symbol}
                 />
@@ -297,7 +367,7 @@ export function AssetLibrary() {
           }}
           type="button"
         >
-          原图
+          自定义
         </button>
       </div>
       <div className="panel-heading">
@@ -365,6 +435,29 @@ export function AssetLibrary() {
           ))}
         </div>
       ) : null}
+      {activeArtworkSource === "custom" ? (
+        <div className="custom-asset-toolbar">
+          <button
+            className="button button-quiet"
+            onClick={() => customAssetInputRef.current?.click()}
+            type="button"
+          >
+            导入自定义兵牌
+          </button>
+          <input
+            accept="image/png,image/jpeg,image/webp"
+            aria-label="选择自定义兵牌图片"
+            className="visually-hidden"
+            onChange={handleCustomAssetImport}
+            ref={customAssetInputRef}
+            type="file"
+          />
+          <span aria-live="polite" role="status">
+            {assetNotice ??
+              `已存档 ${project.customAssets.length} 个兵牌、${project.savedGraphics.length} 个图形`}
+          </span>
+        </div>
+      ) : null}
       <div className="symbol-grid">
         {activeArtworkSource === "flag"
           ? FLAG_ASSETS.map((flag, index) => (
@@ -398,9 +491,23 @@ export function AssetLibrary() {
               </button>
             ))
           : activeArtworkSource === "custom"
-            ? CUSTOM_ASSETS.map(({ id, symbol, label, shortLabel }, index) => (
+            ? [
+                ...CUSTOM_ASSETS.map((asset) => ({
+                  ...asset,
+                  dataUrl: undefined,
+                })),
+                ...project.customAssets.map((asset) => ({
+                  id: asset.id,
+                  symbol: "friendly" as const,
+                  label: asset.name,
+                  shortLabel: "自定义",
+                  dataUrl: asset.dataUrl,
+                })),
+              ].map(({ id, symbol, label, shortLabel, dataUrl }, index) => (
                 <button
-                  aria-label={`原图兵牌 ${label}`}
+                  aria-label={`${
+                    dataUrl ? "自定义兵牌" : "原图兵牌"
+                  } ${label}`}
                   aria-pressed={activeArtwork === id}
                   className="symbol-card"
                   data-artwork-card={id}
@@ -408,6 +515,9 @@ export function AssetLibrary() {
                   key={id}
                   onClick={() => {
                     setActiveSymbol(symbol);
+                    setActiveAffiliation(
+                      id === "custom-nest" ? "hostile" : "friendly",
+                    );
                     setActiveArtwork(id);
                     setTool("marker");
                   }}
@@ -417,10 +527,17 @@ export function AssetLibrary() {
                     {String(index + 1).padStart(2, "0")}
                   </span>
                   <TacticalSymbol
-                    affiliation="hostile"
+                    affiliation={
+                      id === "custom-nest" ? "hostile" : "friendly"
+                    }
                     artwork={id}
                     artworkSource="custom"
-                    color={AFFILIATION_COLORS.hostile}
+                    color={
+                      id === "custom-nest"
+                        ? AFFILIATION_COLORS.hostile
+                        : AFFILIATION_COLORS.friendly
+                    }
+                    customAssetUrl={dataUrl}
                     size={56}
                     symbol={symbol}
                   />
@@ -490,6 +607,37 @@ export function AssetLibrary() {
               </button>
             ))}
       </div>
+
+      {activeArtworkSource === "custom" ? (
+        <div className="saved-graphic-section">
+          <div className="panel-heading panel-heading--compact">
+            <span>图形素材存档</span>
+            <span className="count-pill">
+              {project.savedGraphics.length} 个
+            </span>
+          </div>
+          {project.savedGraphics.length > 0 ? (
+            <div className="saved-graphic-list">
+              {project.savedGraphics.map((graphic) => (
+                <button
+                  aria-label={`调用图形素材 ${graphic.name}`}
+                  className="saved-graphic-card"
+                  key={graphic.id}
+                  onClick={() => insertSavedGraphic(graphic.id)}
+                  type="button"
+                >
+                  <span>{graphic.name}</span>
+                  <small>{graphic.objects.length} 个对象</small>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="panel-copy">
+              在图层面板保存图层或图层组后，可在这里按名称调用。
+            </p>
+          )}
+        </div>
+      ) : null}
 
       <div className="library-divider" />
       <div className="panel-heading panel-heading--compact">

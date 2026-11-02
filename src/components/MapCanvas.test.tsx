@@ -358,6 +358,38 @@ describe("map canvas", () => {
     expect(useEditorStore.getState().past).toHaveLength(historyBefore + 1);
   });
 
+  it("shows pixel distance guides while dragging near another object", () => {
+    const store = useEditorStore.getState();
+    const layerId = store.project.layers[0].id;
+    const marker = createMarker(layerId, { x: 100, y: 100 });
+    const neighbor = createMarker(layerId, { x: 300, y: 100 });
+    store.addObject(marker);
+    store.addObject(neighbor);
+    const { container } = render(<MapCanvas />);
+    const canvas = screen.getByTestId("map-canvas");
+    const markerNode = container.querySelector(
+      `[data-object-id="${marker.id}"]`,
+    );
+    if (!markerNode) throw new Error("Marker SVG was not rendered");
+
+    fireEvent.pointerDown(markerNode, {
+      button: 0,
+      clientX: 100,
+      clientY: 100,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(canvas, {
+      clientX: 168,
+      clientY: 100,
+      pointerId: 1,
+    });
+
+    expect(
+      container.querySelector('[data-alignment-guide="x"]'),
+    ).toBeInTheDocument();
+    expect(screen.getByText("44 px")).toBeInTheDocument();
+  });
+
   it("drags a locked closed region without changing its shape", () => {
     const store = useEditorStore.getState();
     const region = createRegion(store.project.layers[0].id, [
@@ -462,6 +494,69 @@ describe("map canvas", () => {
         { x: 250, y: 100 },
         { x: 250, y: 230 },
         { x: 100, y: 230 },
+      ],
+    });
+    expect(useEditorStore.getState().past).toHaveLength(historyBefore + 1);
+  });
+
+  it("rotates a selected region live from the rotation handle", () => {
+    const store = useEditorStore.getState();
+    const region = createRegion(store.project.layers[0].id, [
+      { x: 100, y: 100 },
+      { x: 200, y: 100 },
+      { x: 200, y: 200 },
+      { x: 100, y: 200 },
+    ]);
+    store.addObject(region);
+    const historyBefore = useEditorStore.getState().past.length;
+    const { container } = render(<MapCanvas />);
+    const canvas = screen.getByTestId("map-canvas");
+    const handle = container.querySelector("[data-rotate-handle]");
+    if (!handle) throw new Error("Rotation handle was not rendered");
+
+    fireEvent.pointerDown(handle, {
+      button: 0,
+      clientX: 150,
+      clientY: 70,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(canvas, {
+      clientX: 230,
+      clientY: 150,
+      pointerId: 1,
+    });
+
+    const boundary = container.querySelector(
+      '[data-object-type="region"] [data-line-role="boundary"]',
+    );
+    expect(boundary).toHaveAttribute(
+      "points",
+      "200,100 200,200 100,200 100,100",
+    );
+    expect(useEditorStore.getState().project.objects[0]).toMatchObject({
+      type: "region",
+      points: [
+        { x: 100, y: 100 },
+        { x: 200, y: 100 },
+        { x: 200, y: 200 },
+        { x: 100, y: 200 },
+      ],
+    });
+    expect(useEditorStore.getState().past).toHaveLength(historyBefore);
+
+    fireEvent.pointerUp(canvas, {
+      clientX: 230,
+      clientY: 150,
+      pointerId: 1,
+    });
+
+    expect(useEditorStore.getState().project.objects[0]).toMatchObject({
+      type: "region",
+      points: [
+        { x: 200, y: 100 },
+        { x: 200, y: 200 },
+        { x: 100, y: 200 },
+        { x: 100, y: 100 },
       ],
     });
     expect(useEditorStore.getState().past).toHaveLength(historyBefore + 1);

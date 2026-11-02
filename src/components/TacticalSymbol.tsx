@@ -28,6 +28,8 @@ type TacticalSymbolProps = {
   artwork?: MarkerArtworkId;
   artworkSource?: UnitArtworkSource;
   strokeEnabled?: boolean;
+  strokeWidth?: number;
+  customAssetUrl?: string;
 };
 
 export function TacticalSymbol({
@@ -38,6 +40,8 @@ export function TacticalSymbol({
   artwork: requestedArtwork,
   artworkSource: requestedArtworkSource,
   strokeEnabled = true,
+  strokeWidth = 2,
+  customAssetUrl,
 }: TacticalSymbolProps) {
   const filterId = `artwork-tint-${useId().replace(/:/g, "")}`;
   const outlineFilterId = `artwork-outline-${useId().replace(/:/g, "")}`;
@@ -60,7 +64,7 @@ export function TacticalSymbol({
       : artworkSource === "nato"
       ? natoArtworkAssetFor(artwork as NatoArtworkId, affiliation)
       : artworkSource === "custom"
-        ? customArtworkAssetFor(artwork as CustomArtworkId)
+        ? customAssetUrl ?? customArtworkAssetFor(artwork as CustomArtworkId)
       : unitArtworkAssetFor(artwork as UnitArtworkId, affiliation);
   const tint = /^#[0-9a-f]{6}$/i.test(color)
     ? color
@@ -96,12 +100,13 @@ export function TacticalSymbol({
         strokeEnabled ? (
           <filter
             data-outline-filter="psd-black"
+            data-outline-radius={strokeWidth}
             id={outlineFilterId}
           >
             <feMorphology
               in="SourceAlpha"
               operator="dilate"
-              radius="1.35"
+              radius={Math.max(0, strokeWidth * 0.675)}
               result="expanded"
             />
             <feFlood floodColor="#000000" result="black" />

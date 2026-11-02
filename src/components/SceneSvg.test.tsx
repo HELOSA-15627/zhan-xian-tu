@@ -31,6 +31,60 @@ describe("scene svg", () => {
     expect(screen.getByText("渡岛作战")).toBeInTheDocument();
   });
 
+  it("renders every visible basemap as an overlay stack", () => {
+    const project = createBlankProject();
+    const mapLayer = project.layers[0];
+    const base = {
+      width: 400,
+      height: 300,
+      opacity: 1,
+      grayscale: 0,
+      contrast: 1,
+      brightness: 1,
+      blur: 0,
+      noise: 0,
+      contourEnabled: false,
+      contourLevels: 8,
+      contourOpacity: 0.35,
+      contourPaths: [],
+      contourImage: null,
+      excludeBlue: true,
+      visible: true,
+      layers: [mapLayer],
+      objects: [],
+    };
+    project.maps = [
+      {
+        ...base,
+        id: "map-a",
+        name: "A",
+        dataUrl: "data:image/png;base64,AAAA",
+      },
+      {
+        ...base,
+        id: "map-b",
+        name: "B",
+        dataUrl: "data:image/png;base64,BBBB",
+      },
+    ];
+    project.activeMapId = "map-a";
+
+    const { container } = render(
+      <SceneSvg
+        project={project}
+        selectedIds={[]}
+        time={null}
+        interactive={false}
+      />,
+    );
+
+    expect(
+      Array.from(
+        container.querySelectorAll("[data-map-overlay-id]"),
+      ).map((node) => node.getAttribute("data-map-overlay-id")),
+    ).toEqual(["map-a", "map-b"]);
+  });
+
   it("omits objects from hidden layers", () => {
     const project = createBlankProject();
     project.layers[0].visible = false;
@@ -75,6 +129,60 @@ describe("scene svg", () => {
     expect(node).not.toHaveAttribute("paint-order");
   });
 
+  it("uses a selected system font for text annotations", () => {
+    const project = createBlankProject();
+    const text = createText(
+      project.layers[0].id,
+      { x: 20, y: 30 },
+      "系统字体",
+    );
+    text.fontFamily = "Microsoft YaHei";
+    project.objects = [text];
+
+    render(
+      <SceneSvg
+        project={project}
+        selectedIds={[]}
+        time={null}
+        interactive={false}
+      />,
+    );
+
+    expect(screen.getByText("系统字体")).toHaveAttribute(
+      "font-family",
+      expect.stringContaining("Microsoft YaHei"),
+    );
+  });
+
+  it("hides objects below a hidden layer group", () => {
+    const project = createBlankProject();
+    const child = project.layers[0];
+    const group = {
+      ...project.layers[0],
+      id: "group-1",
+      name: "作战编组",
+      kind: "group" as const,
+      visible: false,
+      parentId: null,
+    };
+    child.parentId = group.id;
+    project.layers = [group, child];
+    project.objects = [
+      createText(child.id, { x: 20, y: 30 }, "组内不可见"),
+    ];
+
+    render(
+      <SceneSvg
+        project={project}
+        selectedIds={[]}
+        time={null}
+        interactive={false}
+      />,
+    );
+
+    expect(screen.queryByText("组内不可见")).not.toBeInTheDocument();
+  });
+
   it("never renders selection chrome in export mode", () => {
     const project = createBlankProject();
     const text = createText(project.layers[0].id, { x: 20, y: 30 }, "选中文字");
@@ -115,6 +223,46 @@ describe("scene svg", () => {
     expect(
       container.querySelector('[data-marker-decoration="aura"]'),
     ).not.toBeInTheDocument();
+  });
+
+  it("renders imported custom badge artwork from the project library", () => {
+    const project = createBlankProject();
+    project.customAssets = [
+      {
+        id: "custom-asset-test",
+        name: "自定义飞行器",
+        dataUrl: "data:image/png;base64,AAAA",
+        width: 128,
+        height: 96,
+        affiliation: "friendly",
+      },
+    ];
+    project.objects = [
+      createMarker(
+        project.layers[0].id,
+        { x: 70, y: 90 },
+        "friendly",
+        {
+          artwork: "custom-asset-test",
+          artworkSource: "custom",
+        },
+      ),
+    ];
+
+    const { container } = render(
+      <SceneSvg
+        project={project}
+        selectedIds={[]}
+        time={null}
+        interactive={false}
+      />,
+    );
+
+    expect(
+      container.querySelector(
+        '[data-artwork-source="custom"]',
+      ),
+    ).toHaveAttribute("href", "data:image/png;base64,AAAA");
   });
 
   it("renders arrow and freehand line style metadata", () => {
@@ -407,6 +555,183 @@ describe("scene svg", () => {
       "opacity",
       "0.35",
     );
+  });
+
+  it("passes adjustable badge outline width to the artwork filter", () => {
+    const project = createBlankProject();
+    const marker = createMarker(project.layers[0].id, { x: 40, y: 50 });
+    marker.strokeWidth = 4.5;
+    project.objects = [marker];
+
+    const { container } = render(
+      <SceneSvg
+        project={project}
+        selectedIds={[]}
+        time={null}
+        interactive={false}
+      />,
+    );
+
+    expect(
+      container.querySelector("[data-outline-radius]"),
+    ).toHaveAttribute("data-outline-radius", "4.5");
+  });
+
+  it("applies adjustable blur and noise filters to the basemap", () => {
+    const project = createBlankProject();
+    project.background = {
+      ...project.background,
+      dataUrl: "data:image/png;base64,AAAA",
+      blur: 7,
+      noise: 0.2,
+    };
+
+    const { container } = render(
+      <SceneSvg
+        project={project}
+        selectedIds={[]}
+        time={null}
+        interactive={false}
+      />,
+    );
+
+    expect(
+      container
+        .querySelector("[data-background-image]")
+        ?.getAttribute("style"),
+    ).toContain("blur(7px)");
+    expect(
+      container.querySelector("[data-background-noise]"),
+    ).toHaveAttribute("opacity", "0.2");
+    expect(
+      container.querySelector("feTurbulence"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not create a CSS filter layer for identity basemap settings", () => {
+    const project = createBlankProject();
+    project.background = {
+      ...project.background,
+      dataUrl: "data:image/png;base64,AAAA",
+    };
+
+    const { container } = render(
+      <SceneSvg
+        project={project}
+        selectedIds={[]}
+        time={null}
+        interactive={false}
+      />,
+    );
+
+    expect(
+      container
+        .querySelector("[data-background-image]")
+        ?.getAttribute("style"),
+    ).toBeNull();
+  });
+
+  it("avoids a blended noise overlay while interactively editing a filtered basemap", () => {
+    const project = createBlankProject();
+    project.background = {
+      ...project.background,
+      dataUrl: "data:image/png;base64,AAAA",
+      blur: 7,
+      noise: 0.2,
+    };
+
+    const { container } = render(
+      <SceneSvg
+        project={project}
+        selectedIds={[]}
+        time={null}
+        interactive
+      />,
+    );
+
+    expect(
+      container.querySelector("[data-background-noise]"),
+    ).not.toBeInTheDocument();
+    expect(
+      container
+        .querySelector("[data-background-image]")
+        ?.getAttribute("style"),
+    ).toBeNull();
+  });
+
+  it("renders cached luminance contours when enabled", () => {
+    const project = createBlankProject();
+    project.background = {
+      ...project.background,
+      dataUrl: "data:image/png;base64,AAAA",
+      contourEnabled: true,
+      contourPaths: ["M0 0 L20 20"],
+      contourOpacity: 0.4,
+    };
+
+    const { container } = render(
+      <SceneSvg
+        project={project}
+        selectedIds={[]}
+        time={null}
+        interactive={false}
+      />,
+    );
+
+    expect(
+      container.querySelector("[data-background-contours]"),
+    ).toHaveAttribute("d", "M0 0 L20 20");
+  });
+
+  it("prefers the cached contour raster when available", () => {
+    const project = createBlankProject();
+    project.background = {
+      ...project.background,
+      dataUrl: "data:image/png;base64,AAAA",
+      contourEnabled: true,
+      contourPaths: ["M0 0 L20 20"],
+      contourImage: "data:image/png;base64,CONTOURS",
+    };
+
+    const { container } = render(
+      <SceneSvg
+        project={project}
+        selectedIds={[]}
+        time={null}
+        interactive={false}
+      />,
+    );
+
+    expect(
+      container.querySelector("[data-background-contour-raster]"),
+    ).toHaveAttribute("href", "data:image/png;base64,CONTOURS");
+  });
+
+  it("exposes the adjustable dash segment count on arrows", () => {
+    const project = createBlankProject();
+    const arrow = createArrow(
+      project.layers[0].id,
+      { x: 0, y: 0 },
+      { x: 300, y: 0 },
+      "dashed",
+    );
+    arrow.lineDashCount = 12;
+    project.objects = [arrow];
+
+    const { container } = render(
+      <SceneSvg
+        project={project}
+        selectedIds={[]}
+        time={null}
+        interactive={false}
+      />,
+    );
+
+    const shaft = container.querySelector(
+      '[data-line-role="shaft"]',
+    );
+    expect(shaft).toHaveAttribute("data-line-dash-count", "12");
+    expect(shaft).toHaveAttribute("stroke-dasharray");
   });
 
   it("renders an attached flag at the chosen badge position and size", () => {

@@ -44,6 +44,16 @@ export function createLayer(name: string): Layer {
     visible: true,
     locked: false,
     opacity: 1,
+    parentId: null,
+    kind: "layer",
+    expanded: true,
+  };
+}
+
+export function createLayerGroup(name: string): Layer {
+  return {
+    ...createLayer(name),
+    kind: "group",
   };
 }
 
@@ -63,11 +73,21 @@ export function createBlankProject(title = "未命名战役"): AtlasProject {
       grayscale: 0,
       contrast: 1,
       brightness: 1,
+      blur: 0,
+      noise: 0,
+      contourEnabled: false,
+      contourLevels: 8,
+      contourOpacity: 0.35,
+      contourPaths: [],
+      contourImage: null,
+      excludeBlue: true,
     },
     maps: [],
     activeMapId: null,
     layers: [layer],
     objects: [],
+    customAssets: [],
+    savedGraphics: [],
   };
 }
 
@@ -97,10 +117,13 @@ export function createMarker(
     size: DEFAULT_MARKER_SIZE,
     scaleX: 1,
     scaleY: 1,
+    flipX: false,
+    flipY: false,
     rotation: 0,
     opacity: 1,
     color: options.color ?? AFFILIATION_COLORS[affiliation],
     strokeEnabled: true,
+    strokeWidth: 2,
     symbol,
     affiliation,
     artwork,
@@ -139,6 +162,7 @@ export function createArrow(
     tint,
     pathMode,
     dashed: false,
+    lineDashCount: 18,
     animation: {
       enabled: true,
       delay: 0,
@@ -206,10 +230,13 @@ export function createText(
     y: point.y,
     scaleX: 1,
     scaleY: 1,
+    flipX: false,
+    flipY: false,
     text,
     color: "#1f2430",
     fontSize: 20,
     strokeEnabled: true,
+    fontFamily: "Microsoft YaHei",
     rotation: 0,
     opacity: 1,
   };
@@ -234,6 +261,7 @@ export function createFreehand(
     endWidth: brush?.endWidth ?? strokeWidth,
     opacity: 1,
     lineStyle,
+    lineDashCount: 18,
     label: "",
   };
 }

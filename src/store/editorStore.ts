@@ -2,10 +2,18 @@ import { create } from "zustand";
 
 import {
   createBlankProject,
+  createId,
   createLayer,
+  createLayerGroup,
   duplicateObject,
   normalizeStrokeWidth,
 } from "../model/project";
+import { descendantLayerIds } from "../model/layerTree";
+import {
+  backgroundForMap,
+  hydrateActiveMapState,
+  syncActiveMapState,
+} from "../model/mapState";
 import { normalizeFlagAttachment } from "../model/flags";
 import {
   DEFAULT_BRUSH_PRESET_ID,
@@ -29,6 +37,7 @@ import type {
   TacticalSymbol,
   UnitAffiliation,
   UnitArtworkSource,
+  UserArtworkAsset,
 } from "../model/types";
 
 const HISTORY_LIMIT = 50;
@@ -116,16 +125,28 @@ export type EditorState = {
   ) => void;
   selectMap: (mapId: string) => void;
   renameMap: (mapId: string, name: string) => void;
+  toggleMapVisibility: (mapId: string) => void;
+  moveMap: (mapId: string, direction: -1 | 1) => void;
   addObject: (object: SceneObject) => void;
   updateObject: (id: string, patch: SceneObjectPatch) => void;
   removeObject: (id: string) => void;
   removeSelected: () => void;
   duplicateSelected: () => void;
-  addLayer: (name?: string) => void;
+  addLayer: (name?: string, parentId?: string) => void;
+  createGroupFromActiveLayer: (name?: string) => void;
   renameLayer: (layerId: string, name: string) => void;
+  setLayerOpacity: (layerId: string, opacity: number) => void;
+  moveLayer: (layerId: string, direction: -1 | 1) => void;
   toggleLayer: (layerId: string) => void;
   toggleLayerLock: (layerId: string) => void;
+  toggleLayerExpanded: (layerId: string) => void;
   deleteLayer: (layerId: string) => void;
+  moveObjectInLayer: (objectId: string, direction: -1 | 1) => void;
+  moveObjectToLayer: (objectId: string, layerId: string) => void;
+  saveLayerAsGraphic: (layerId: string, name: string) => void;
+  insertSavedGraphic: (graphicId: string) => void;
+  addCustomArtwork: (asset: UserArtworkAsset) => void;
+  removeCustomArtwork: (assetId: string) => void;
   undo: () => void;
   redo: () => void;
 };
@@ -159,12 +180,13 @@ export const useEditorStore = create<EditorState>((set, get) => {
     > = {},
   ) => {
     const state = get();
+    const syncedProject = syncActiveMapState(project);
     const past = [...state.past, cloneProject(state.project)].slice(
       -HISTORY_LIMIT,
     );
 
     set({
-      project: touchProject(project),
+      project: touchProject(syncedProject),
       past,
       future: [],
       ...extra,
@@ -255,7 +277,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     },
 
     loadProject: (project) => {
-      const next = cloneProject(project);
+      const next = hydrateActiveMapState(cloneProject(project));
       set({
         project: next,
         selectedIds: [],
@@ -286,6 +308,12 @@ export const useEditorStore = create<EditorState>((set, get) => {
 
     applyBackground: (dataUrl, width, height, name) => {
       const next = cloneProject(get().project);
+      syncActiveMapState(next);
+      const firstMap = next.maps.length === 0;
+      const mapLayers = firstMap
+        ? structuredClone(next.layers)
+        : [createLayer("标注图层")];
+      const mapObjects = firstMap ? structuredClone(next.objects) : [];
       const mapName =
         name?.trim() || `导入地图 ${next.maps.length + 1}`;
       const map: ImportedMap = {
@@ -298,40 +326,46 @@ export const useEditorStore = create<EditorState>((set, get) => {
         grayscale: 0,
         contrast: 1,
         brightness: 1,
+        blur: 0,
+        noise: 0,
+        contourEnabled: false,
+        contourLevels: 8,
+        contourOpacity: 0.35,
+        contourPaths: [],
+        contourImage: null,
+        excludeBlue: true,
+        visible: true,
+        layers: mapLayers,
+        objects: mapObjects,
       };
-      const firstMap = next.maps.length === 0;
       next.width = width;
       next.height = height;
-      next.background = {
-        opacity: map.opacity,
-        grayscale: map.grayscale,
-        contrast: map.contrast,
-        brightness: map.brightness,
-        dataUrl,
-      };
+      next.background = backgroundForMap(map);
       next.maps.push(map);
       next.activeMapId = map.id;
+      next.layers = structuredClone(map.layers);
+      next.objects = structuredClone(map.objects);
       if (firstMap && name?.trim()) {
         next.title = name.trim();
       }
-      commitProject(next);
+      commitProject(next, {
+        activeLayerId: map.layers[0]?.id ?? "",
+        selectedIds: [],
+      });
     },
 
     selectMap: (mapId) => {
       const next = cloneProject(get().project);
+      syncActiveMapState(next);
       const map = next.maps.find((item) => item.id === mapId);
       if (!map || next.activeMapId === mapId) return;
       next.activeMapId = map.id;
-      next.width = map.width;
-      next.height = map.height;
-      next.background = {
-        dataUrl: map.dataUrl,
-        opacity: map.opacity,
-        grayscale: map.grayscale,
-        contrast: map.contrast,
-        brightness: map.brightness,
-      };
-      commitProject(next);
+      const hydrated = hydrateActiveMapState(next);
+      set({
+        project: touchProject(hydrated),
+        selectedIds: [],
+        activeLayerId: hydrated.layers[0]?.id ?? "",
+      });
     },
 
     renameMap: (mapId, name) => {
@@ -341,6 +375,26 @@ export const useEditorStore = create<EditorState>((set, get) => {
       const map = next.maps.find((item) => item.id === mapId);
       if (!map || map.name === trimmed) return;
       map.name = trimmed;
+      commitProject(next);
+    },
+
+    toggleMapVisibility: (mapId) => {
+      const next = cloneProject(get().project);
+      const map = next.maps.find((item) => item.id === mapId);
+      if (!map) return;
+      map.visible = map.visible === false;
+      commitProject(next);
+    },
+
+    moveMap: (mapId, direction) => {
+      const next = cloneProject(get().project);
+      const index = next.maps.findIndex((map) => map.id === mapId);
+      const target = index + direction;
+      if (index === -1 || target < 0 || target >= next.maps.length) return;
+      [next.maps[index], next.maps[target]] = [
+        next.maps[target],
+        next.maps[index],
+      ];
       commitProject(next);
     },
 
@@ -382,7 +436,13 @@ export const useEditorStore = create<EditorState>((set, get) => {
       if (normalizedPatch.headSize !== undefined) {
         normalizedPatch.headSize = Math.min(
           160,
-          Math.max(12, normalizedPatch.headSize),
+          Math.max(0, normalizedPatch.headSize),
+        );
+      }
+      if (normalizedPatch.strokeWidth !== undefined) {
+        normalizedPatch.strokeWidth = Math.min(
+          16,
+          Math.max(0, normalizedPatch.strokeWidth),
         );
       }
       if (normalizedPatch.lineDashCount !== undefined) {
@@ -445,13 +505,38 @@ export const useEditorStore = create<EditorState>((set, get) => {
       });
     },
 
-    addLayer: (name) => {
+    addLayer: (name, parentId) => {
       const next = cloneProject(get().project);
       const layer = createLayer(
         name?.trim() || `标注图层 ${next.layers.length + 1}`,
       );
+      const activeLayer = next.layers.find(
+        (item) => item.id === (parentId ?? get().activeLayerId),
+      );
+      layer.parentId = parentId
+        ? activeLayer?.id ?? null
+        : activeLayer?.kind === "group"
+          ? activeLayer.id
+          : null;
       next.layers.push(layer);
       commitProject(next, { activeLayerId: layer.id });
+    },
+
+    createGroupFromActiveLayer: (name) => {
+      const state = get();
+      const next = cloneProject(state.project);
+      const activeIndex = next.layers.findIndex(
+        (layer) => layer.id === state.activeLayerId,
+      );
+      if (activeIndex === -1) return;
+      const activeLayer = next.layers[activeIndex];
+      const group = createLayerGroup(
+        name?.trim() || `图层组 ${next.layers.length + 1}`,
+      );
+      group.parentId = activeLayer.parentId;
+      next.layers.splice(activeIndex, 0, group);
+      activeLayer.parentId = group.id;
+      commitProject(next, { activeLayerId: group.id });
     },
 
     renameLayer: (layerId, name) => {
@@ -459,6 +544,26 @@ export const useEditorStore = create<EditorState>((set, get) => {
       const layer = next.layers.find((item) => item.id === layerId);
       if (!layer || !name.trim()) return;
       layer.name = name.trim();
+      commitProject(next);
+    },
+
+    setLayerOpacity: (layerId, opacity) => {
+      const next = cloneProject(get().project);
+      const layer = next.layers.find((item) => item.id === layerId);
+      if (!layer) return;
+      layer.opacity = Math.min(1, Math.max(0, opacity));
+      commitProject(next);
+    },
+
+    moveLayer: (layerId, direction) => {
+      const next = cloneProject(get().project);
+      const index = next.layers.findIndex((layer) => layer.id === layerId);
+      const target = index + direction;
+      if (index === -1 || target < 0 || target >= next.layers.length) return;
+      [next.layers[index], next.layers[target]] = [
+        next.layers[target],
+        next.layers[index],
+      ];
       commitProject(next);
     },
 
@@ -478,13 +583,30 @@ export const useEditorStore = create<EditorState>((set, get) => {
       commitProject(next);
     },
 
+    toggleLayerExpanded: (layerId) => {
+      const next = cloneProject(get().project);
+      const layer = next.layers.find((item) => item.id === layerId);
+      if (!layer) return;
+      layer.expanded = !layer.expanded;
+      commitProject(next);
+    },
+
     deleteLayer: (layerId) => {
       const state = get();
       if (state.project.layers.length <= 1) return;
       const next = cloneProject(state.project);
-      next.layers = next.layers.filter((layer) => layer.id !== layerId);
+      const removedLayerIds = new Set([
+        layerId,
+        ...descendantLayerIds(state.project.layers, layerId),
+      ]);
+      next.layers = next.layers.filter(
+        (layer) => !removedLayerIds.has(layer.id),
+      );
+      if (next.layers.length === 0) {
+        next.layers.push(createLayer("标注图层"));
+      }
       next.objects = next.objects.filter(
-        (object) => object.layerId !== layerId,
+        (object) => !removedLayerIds.has(object.layerId),
       );
       const activeLayerId =
         state.activeLayerId === layerId
@@ -496,21 +618,143 @@ export const useEditorStore = create<EditorState>((set, get) => {
       });
     },
 
+    moveObjectInLayer: (objectId, direction) => {
+      const next = cloneProject(get().project);
+      const object = next.objects.find((item) => item.id === objectId);
+      if (!object) return;
+      const siblings = next.objects.filter(
+        (item) => item.layerId === object.layerId,
+      );
+      const siblingIndex = siblings.findIndex((item) => item.id === objectId);
+      const neighbor = siblings[siblingIndex + direction];
+      if (!neighbor) return;
+      const objectIndex = next.objects.findIndex(
+        (item) => item.id === object.id,
+      );
+      const neighborIndex = next.objects.findIndex(
+        (item) => item.id === neighbor.id,
+      );
+      [next.objects[objectIndex], next.objects[neighborIndex]] = [
+        next.objects[neighborIndex],
+        next.objects[objectIndex],
+      ];
+      commitProject(next);
+    },
+
+    moveObjectToLayer: (objectId, layerId) => {
+      const next = cloneProject(get().project);
+      const object = next.objects.find((item) => item.id === objectId);
+      const target = next.layers.find((layer) => layer.id === layerId);
+      if (
+        !object ||
+        !target ||
+        target.kind === "group" ||
+        object.layerId === layerId
+      ) {
+        return;
+      }
+      object.layerId = layerId;
+      commitProject(next, { activeLayerId: layerId });
+    },
+
+    saveLayerAsGraphic: (layerId, name) => {
+      const state = get();
+      const source = state.project.layers.find(
+        (layer) => layer.id === layerId,
+      );
+      const trimmed = name.trim();
+      if (!source || !trimmed) return;
+      const layerIds = new Set([
+        layerId,
+        ...descendantLayerIds(state.project.layers, layerId),
+      ]);
+      const next = cloneProject(state.project);
+      next.savedGraphics.push({
+        id: createId("graphic"),
+        name: trimmed,
+        width: state.project.width,
+        height: state.project.height,
+        layers: structuredClone(
+          state.project.layers.filter((layer) => layerIds.has(layer.id)),
+        ),
+        objects: structuredClone(
+          state.project.objects.filter((object) =>
+            layerIds.has(object.layerId),
+          ),
+        ),
+      });
+      commitProject(next);
+    },
+
+    insertSavedGraphic: (graphicId) => {
+      const state = get();
+      const saved = state.project.savedGraphics.find(
+        (graphic) => graphic.id === graphicId,
+      );
+      if (!saved) return;
+      const next = cloneProject(state.project);
+      const root = createLayerGroup(saved.name);
+      const savedLayerIds = new Set(saved.layers.map((layer) => layer.id));
+      const idMap = new Map(
+        saved.layers.map((layer) => [layer.id, createId("layer")]),
+      );
+      const insertedLayers = saved.layers.map((layer) => ({
+        ...structuredClone(layer),
+        id: idMap.get(layer.id)!,
+        parentId:
+          layer.parentId && savedLayerIds.has(layer.parentId)
+            ? idMap.get(layer.parentId)!
+            : root.id,
+      }));
+      const insertedObjects = saved.objects.map((object) => {
+        const copy = structuredClone(object);
+        copy.id = createId(copy.type);
+        copy.layerId = idMap.get(object.layerId) ?? root.id;
+        offsetSceneObject(copy, 24, 24);
+        return copy;
+      });
+      next.layers.push(root, ...insertedLayers);
+      next.objects.push(...insertedObjects);
+      commitProject(next, {
+        selectedIds: insertedObjects.map((object) => object.id),
+        activeLayerId: insertedLayers[0]?.id ?? root.id,
+      });
+    },
+
+    addCustomArtwork: (asset) => {
+      const next = cloneProject(get().project);
+      const index = next.customAssets.findIndex(
+        (candidate) => candidate.id === asset.id,
+      );
+      if (index >= 0) next.customAssets[index] = structuredClone(asset);
+      else next.customAssets.push(structuredClone(asset));
+      commitProject(next);
+    },
+
+    removeCustomArtwork: (assetId) => {
+      const next = cloneProject(get().project);
+      next.customAssets = next.customAssets.filter(
+        (asset) => asset.id !== assetId,
+      );
+      commitProject(next);
+    },
+
     undo: () => {
       const state = get();
       const previous = state.past.at(-1);
       if (!previous) return;
+      const restored = hydrateActiveMapState(cloneProject(previous));
       set({
-        project: cloneProject(previous),
+        project: restored,
         past: state.past.slice(0, -1),
         future: [cloneProject(state.project), ...state.future].slice(
           0,
           HISTORY_LIMIT,
         ),
-        selectedIds: normalizeSelection(state.selectedIds, previous),
+        selectedIds: normalizeSelection(state.selectedIds, restored),
         activeLayerId:
-          previous.layers.find((layer) => layer.id === state.activeLayerId)?.id ??
-          previous.layers[0].id,
+          restored.layers.find((layer) => layer.id === state.activeLayerId)?.id ??
+          restored.layers[0].id,
       });
     },
 
@@ -518,16 +762,17 @@ export const useEditorStore = create<EditorState>((set, get) => {
       const state = get();
       const next = state.future[0];
       if (!next) return;
+      const restored = hydrateActiveMapState(cloneProject(next));
       set({
-        project: cloneProject(next),
+        project: restored,
         past: [...state.past, cloneProject(state.project)].slice(
           -HISTORY_LIMIT,
         ),
         future: state.future.slice(1),
-        selectedIds: normalizeSelection(state.selectedIds, next),
+        selectedIds: normalizeSelection(state.selectedIds, restored),
         activeLayerId:
-          next.layers.find((layer) => layer.id === state.activeLayerId)?.id ??
-          next.layers[0].id,
+          restored.layers.find((layer) => layer.id === state.activeLayerId)?.id ??
+          restored.layers[0].id,
       });
     },
   };
@@ -538,4 +783,32 @@ export function getLayerForObject(
   object: SceneObject,
 ): Layer | undefined {
   return project.layers.find((layer) => layer.id === object.layerId);
+}
+
+function offsetSceneObject(
+  object: SceneObject,
+  dx: number,
+  dy: number,
+): void {
+  const offsetPoint = (point: { x: number; y: number }) => {
+    point.x += dx;
+    point.y += dy;
+  };
+
+  switch (object.type) {
+    case "marker":
+    case "text":
+      object.x += dx;
+      object.y += dy;
+      break;
+    case "arrow":
+      offsetPoint(object.start);
+      offsetPoint(object.end);
+      object.points.forEach(offsetPoint);
+      break;
+    case "region":
+    case "freehand":
+      object.points.forEach(offsetPoint);
+      break;
+  }
 }
